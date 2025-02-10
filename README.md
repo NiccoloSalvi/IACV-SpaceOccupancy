@@ -62,7 +62,7 @@ The goal of this system is to:
 ## 📍 Car Localization Approaches
 ### 🔹 1. **Standard Localization**
 - Uses a **single image** and **homography estimation**:
-  $$\mathbf{r}_1 \mathbf{r}_2 \mathbf{o}_{\pi} = K^{-1} H$$
+  $\mathbf{r}_1 \mathbf{r}_2 \mathbf{o}_{\pi} = K^{-1} H$
 
 ### 🔹 2. **Nighttime Localization (Image Pair-Based)**
 - Uses two **non-consecutive** frames to increase perspective.

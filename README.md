@@ -30,22 +30,22 @@ The goal of this system is to:
 ## 📐 Geometric Processing
 ### 🚗 Case 1: Car Moving Forward
 - The light segments in consecutive frames form a **rectangle**.
-- The **center of rotation** $ C $ is determined.
+- The **center of rotation** $C$ is determined.
 - **Parallel line constraints** help identify motion characteristics.
 
 ### 🔄 Case 2: Car Steering with Constant Curvature
-- The light segment **rotates** about a center of rotation $ C $.
-- A **bisecting line** $ b $ aids in motion analysis.
+- The light segment **rotates** about a center of rotation $C$.
+- A **bisecting line** $b$ aids in motion analysis.
 
 ## 📏 Methods Used
 ### **1️⃣ Translating Forward**
-- Identify intersection points $ V_x $ and $ V_y $.
+- Identify intersection points $V_x$ and $V_y$.
 - Compute the **3D direction** of the light segment.
 - Determine if the car is moving forward by checking perpendicularity.
 - Estimate **vanishing lines** and compute the **camera-to-plane distance**.
 
 ### **2️⃣ Steering with Constant Curvature**
-- Find intersection points $ C_b $ and $ V_y $.
+- Find intersection points $C_b$ and $V_y$.
 - Validate if **directional constraints** hold.
 - Compute **vanishing lines** and estimate distances.
 
@@ -71,7 +71,7 @@ The goal of this system is to:
 ### 🔹 3. **Nighttime Localization (Symmetric Elements-Based)**
 - Uses multiple symmetric elements to **estimate rotation**.
 
-## 📏 Computing Horizontal Inclination Angle $ \theta $
+## 📏 Computing Horizontal Inclination Angle $\theta$
 - Extracts **y-coordinates** from key points.
 - Uses CAD model data to compute **rotation**.
 - Estimates **3D position** based on segment lengths.

@@ -56,7 +56,7 @@ def detect_red_lights(image, min_area=5):
     return red_lights, boxes
 
 
-def detect_license_plate(image, lights, min_plate_area=500):
+def detect_license_plate(image, lights, min_plate_area=3):
     if len(lights) < 2:
         return None  # Not enough light points to define ROI
 
@@ -84,12 +84,18 @@ def detect_license_plate(image, lights, min_plate_area=500):
     # Adjusted bright-white mask for plates
     lower_white = np.array([0, 0, 200])
     upper_white = np.array([180, 60, 255])
-    mask_white = cv2.inRange(hsv, lower_white, upper_white)
+    white_mask = cv2.inRange(hsv, lower_white, upper_white)
 
+    lower_blue = np.array([100, 100, 100])
+    upper_blue = np.array([130, 255, 255])
+    blue_mask = cv2.inRange(hsv, lower_blue, upper_blue)
+
+    plate_mask = cv2.bitwise_or(white_mask, blue_mask)
+
+    # Clean the mask
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-    mask_white = cv2.morphologyEx(mask_white, cv2.MORPH_CLOSE, kernel)
-
-    contours, _ = cv2.findContours(mask_white, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    plate_mask = cv2.morphologyEx(plate_mask, cv2.MORPH_CLOSE, kernel)
+    contours, _ = cv2.findContours(plate_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     best_plate = None
     best_score = 0
@@ -98,6 +104,7 @@ def detect_license_plate(image, lights, min_plate_area=500):
         if area < min_plate_area:
             continue
         x, y, w_box, h_box = cv2.boundingRect(cnt)
+
         aspect_ratio = w_box / float(h_box)
         if 1.5 < aspect_ratio < 5.5:
             score = area
@@ -110,49 +117,40 @@ def detect_license_plate(image, lights, min_plate_area=500):
 
 
 frame1 = cv2.imread("outputFolder/frame_02.png")
-frame2 = cv2.imread("outputFolder/frame_03.png")
+frame2 = cv2.imread("outputFolder/frame_14.png")
 
 lights1, box1 = detect_red_lights(frame1)
 lights2, box2 = detect_red_lights(frame2)
 
 # draw detections
 for pt in lights1:
-    cv2.circle(frame1, pt, 6, (0, 255, 0), -1)
-    cv2.putText(frame1, f"{pt}", (pt[0]+6, pt[1]-6), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1)
+    cv2.circle(frame1, pt, 10, (0, 255, 0), -1)
+    #cv2.putText(frame1, f"{pt}", (pt[0]+6, pt[1]-6), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1)
 
 for pt in lights2:
-    cv2.circle(frame2, pt, 6, (0, 255, 0), -1)
+    cv2.circle(frame2, pt, 10, (0, 255, 0), -1)
     cv2.putText(frame2, f"{pt}", (pt[0]+6, pt[1]-6), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1)
 
-# draw light segments
-if len(lights1) >= 2:
-    L1, R1 = lights1[0], lights1[1]
-    cv2.line(frame1, L1, R1, (255, 0, 0), 2)
-else:
-    print("Not enough lights in Frame 1")
+L1, R1 = lights1[0], lights1[1]
+cv2.line(frame1, L1, R1, (255, 0, 0), 5)
 
-if len(lights2) >= 2:
-    L2, R2 = lights2[0], lights2[1]
-    cv2.line(frame2, L2, R2, (255, 0, 0), 2)
-else:
-    print("Not enough lights in Frame 2")
+L2, R2 = lights2[0], lights2[1]
+cv2.line(frame2, L2, R2, (255, 0, 0), 5)
 
-cv2.imshow("Frame 1 - Light Segment (Outer Edge Center)", frame1)
-cv2.imshow("Frame 2 - Light Segment (Outer Edge Center)", frame2)
+cv2.imshow("Frame 1", frame1)
+cv2.imshow("Frame 2", frame2)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
 
-plate_box = detect_license_plate(frame1, lights1)
-
-frame1 = cv2.imread("outputFolder/frame_02.png")
+frame = cv2.imread("outputFolder/frame_14.png")
+plate_box = detect_license_plate(frame, lights1)
 
 if plate_box:
     x, y, w, h = plate_box
-    cv2.rectangle(frame1, (x, y), (x + w, y + h), (0, 255, 255), 2)
-    cv2.putText(frame1, "License Plate", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 255), 5)
+    #cv2.putText(frame, "License Plate", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 else:
-    print("No plate detected.")
-
-cv2.imshow("Frame with Plate", frame1)
+    print("No license plate detected")
+cv2.imshow("Frame with Plate", frame)
 cv2.waitKey(0)
 cv2.destroyAllWindows()

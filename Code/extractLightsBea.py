@@ -117,7 +117,7 @@ def detect_license_plate(image, lights, min_plate_area=3):
 
 
 frame1 = cv2.imread("outputFolder/frame_02.png")
-frame2 = cv2.imread("outputFolder/frame_14.png")
+frame2 = cv2.imread("outputFolder/frame_10.png")
 
 lights1, box1 = detect_red_lights(frame1)
 lights2, box2 = detect_red_lights(frame2)
@@ -142,7 +142,7 @@ cv2.imshow("Frame 2", frame2)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
 
-frame = cv2.imread("outputFolder/frame_14.png")
+frame = cv2.imread("outputFolder/frame_10.png")
 plate_box = detect_license_plate(frame, lights1)
 
 if plate_box:

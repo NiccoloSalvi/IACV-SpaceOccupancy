@@ -55,6 +55,60 @@ def detect_red_lights(image, min_area=5):
 
     return red_lights, boxes
 
+
+def detect_license_plate(image, lights, min_plate_area=500):
+    if len(lights) < 2:
+        return None  # Not enough light points to define ROI
+
+    # Get horizontal span from taillights
+    (lx, ly), (rx, ry) = lights[0], lights[-1]
+
+    # Define region: extend left/right, and down for possible plate
+    roi_margin = 20
+    roi_top = min(ly, ry) - 10
+    roi_bottom = max(ly, ry) + 60  # plates usually just below lights
+    roi_left = lx - roi_margin
+    roi_right = rx + roi_margin
+
+    # Clip the ROI to image bounds
+    h, w = image.shape[:2]
+    roi_left = max(0, roi_left)
+    roi_right = min(w, roi_right)
+    roi_top = max(0, roi_top)
+    roi_bottom = min(h, roi_bottom)
+
+    roi = image[roi_top:roi_bottom, roi_left:roi_right]
+
+    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+
+    # Adjusted bright-white mask for plates
+    lower_white = np.array([0, 0, 200])
+    upper_white = np.array([180, 60, 255])
+    mask_white = cv2.inRange(hsv, lower_white, upper_white)
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    mask_white = cv2.morphologyEx(mask_white, cv2.MORPH_CLOSE, kernel)
+
+    contours, _ = cv2.findContours(mask_white, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    best_plate = None
+    best_score = 0
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if area < min_plate_area:
+            continue
+        x, y, w_box, h_box = cv2.boundingRect(cnt)
+        aspect_ratio = w_box / float(h_box)
+        if 1.5 < aspect_ratio < 5.5:
+            score = area
+            if score > best_score:
+                best_score = score
+                best_plate = (x + roi_left, y + roi_top, w_box, h_box)
+
+    return best_plate
+
+
+
 frame1 = cv2.imread("outputFolder/frame_02.png")
 frame2 = cv2.imread("outputFolder/frame_03.png")
 
@@ -85,5 +139,20 @@ else:
 
 cv2.imshow("Frame 1 - Light Segment (Outer Edge Center)", frame1)
 cv2.imshow("Frame 2 - Light Segment (Outer Edge Center)", frame2)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+
+plate_box = detect_license_plate(frame1, lights1)
+
+frame1 = cv2.imread("outputFolder/frame_02.png")
+
+if plate_box:
+    x, y, w, h = plate_box
+    cv2.rectangle(frame1, (x, y), (x + w, y + h), (0, 255, 255), 2)
+    cv2.putText(frame1, "License Plate", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+else:
+    print("No plate detected.")
+
+cv2.imshow("Frame with Plate", frame1)
 cv2.waitKey(0)
 cv2.destroyAllWindows()

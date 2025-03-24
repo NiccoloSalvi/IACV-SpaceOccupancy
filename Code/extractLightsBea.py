@@ -56,40 +56,56 @@ def detect_red_lights(image, min_area=3):
 
 
 def detect_license_plate(image, lights, min_plate_area=200):
-    if len(lights) < 2:
-        return None  # Not enough light points to define ROI
 
-    # Get horizontal span from taillights
     (lx, ly), (rx, ry) = lights[0], lights[-1]
 
-    # Define region: extend left/right, and down for possible plate
-    roi_margin = 20
-    roi_top = min(ly, ry) - 10
-    roi_bottom = max(ly, ry) + 60  # plates usually just below lights
-    roi_left = lx - roi_margin
-    roi_right = rx + roi_margin
+    dx, dy = rx - lx, ry - ly
+    angle = np.degrees(np.arctan2(dy, dx))
 
-    # Clip the ROI to image bounds
-    h, w = image.shape[:2]
+    # calculate rotation center
+    center = ((lx + rx) // 2, (ly + ry) // 2)
+
+    # get rotation matrix and rotate image
+    rot_matrix = cv2.getRotationMatrix2D(center, -angle, 1.0)
+    rotated_image = cv2.warpAffine(image, rot_matrix, (image.shape[1], image.shape[0]))
+
+    def rotate_point(x, y, M):
+        px = M[0, 0] * x + M[0, 1] * y + M[0, 2]
+        py = M[1, 0] * x + M[1, 1] * y + M[1, 2]
+        return int(px), int(py)
+
+    new_lx, new_ly = rotate_point(lx, ly, rot_matrix)
+    new_rx, new_ry = rotate_point(rx, ry, rot_matrix)
+
+    # Define ROI in rotated image
+    roi_margin = 20
+    roi_top = min(new_ly, new_ry) - 10
+    roi_bottom = max(new_ly, new_ry) + 60
+    roi_left = new_lx - roi_margin
+    roi_right = new_rx + roi_margin
+
+    h, w = rotated_image.shape[:2]
     roi_left = max(0, roi_left)
     roi_right = min(w, roi_right)
     roi_top = max(0, roi_top)
     roi_bottom = min(h, roi_bottom)
 
-    roi = image[roi_top:roi_bottom, roi_left:roi_right]
-
+    roi = rotated_image[roi_top:roi_bottom, roi_left:roi_right]
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 
-    # Adjusted bright-white mask for plates
+    # white mask for white parts of the plate
     lower_white = np.array([0, 0, 200])
     upper_white = np.array([180, 60, 255])
     white_mask = cv2.inRange(hsv, lower_white, upper_white)
 
-    lower_blue = np.array([100, 100, 100])
+    # blue mask for blue part of the plate
+    # we keep this if we want the whole plate to be taken into account
+    lower_blue = np.array([100, 90, 90])
     upper_blue = np.array([130, 255, 255])
     blue_mask = cv2.inRange(hsv, lower_blue, upper_blue)
 
     plate_mask = cv2.bitwise_or(white_mask, blue_mask)
+    #plate_mask = white_mask
 
     # Clean the mask
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
@@ -116,7 +132,7 @@ def detect_license_plate(image, lights, min_plate_area=200):
 
 
 frame1 = cv2.imread("outputFolder/frame_02.png")
-frame2 = cv2.imread("outputFolder/frame_04.png")
+frame2 = cv2.imread("outputFolder/frame_10.png")
 
 lights1, box1 = detect_red_lights(frame1)
 lights2, box2 = detect_red_lights(frame2)
@@ -144,8 +160,8 @@ cv2.imshow("Frame 2", frame2)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
 
-frame = cv2.imread("outputFolder/frame_02.png")
-plate_box = detect_license_plate(frame, lights1)
+frame = cv2.imread("outputFolder/frame_10.png")
+plate_box = detect_license_plate(frame, lights2)
 
 if plate_box:
     x, y, w, h = plate_box

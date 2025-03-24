@@ -116,8 +116,8 @@ def detect_license_plate(image, lights, min_plate_area=3):
 
 
 
-frame1 = cv2.imread("outputFolder/frame_02.png")
-frame2 = cv2.imread("outputFolder/frame_10.png")
+frame1 = cv2.imread("C:/UNI/esami_vecchi/IACV/IACV_Project/videos/frames67/frame_0007.png")
+frame2 = cv2.imread("C:/UNI/esami_vecchi/IACV/IACV_Project/videos/frames67/frame_0014.png")
 
 lights1, box1 = detect_red_lights(frame1)
 lights2, box2 = detect_red_lights(frame2)
@@ -137,12 +137,15 @@ cv2.line(frame1, L1, R1, (255, 0, 0), 5)
 L2, R2 = lights2[0], lights2[1]
 cv2.line(frame2, L2, R2, (255, 0, 0), 5)
 
+#resize image, reduce size by half
+frame1 = cv2.resize(frame1, (frame1.shape[1] // 4, frame1.shape[0] // 4), interpolation=cv2.INTER_AREA)
+frame2 = cv2.resize(frame2, (frame2.shape[1] // 4, frame2.shape[0] // 4), interpolation=cv2.INTER_AREA)
 cv2.imshow("Frame 1", frame1)
 cv2.imshow("Frame 2", frame2)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
 
-frame = cv2.imread("outputFolder/frame_10.png")
+frame = cv2.imread("C:/UNI/esami_vecchi/IACV/IACV_Project/videos/frames67/frame_0007.png")
 plate_box = detect_license_plate(frame, lights1)
 
 if plate_box:
@@ -151,6 +154,8 @@ if plate_box:
     #cv2.putText(frame, "License Plate", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 else:
     print("No license plate detected")
+
+frame = cv2.resize(frame, (frame.shape[1] // 4, frame.shape[0] // 4), interpolation=cv2.INTER_AREA)
 cv2.imshow("Frame with Plate", frame)
 cv2.waitKey(0)
 cv2.destroyAllWindows()

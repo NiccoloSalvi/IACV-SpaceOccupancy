@@ -1,8 +1,7 @@
 import cv2
-import os
 import numpy as np
 
-def detect_red_lights(image, min_area=5):
+def detect_red_lights(image, min_area=3):
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
     # Red hue range (focused on core light, less aura)
@@ -56,7 +55,7 @@ def detect_red_lights(image, min_area=5):
     return red_lights, boxes
 
 
-def detect_license_plate(image, lights, min_plate_area=3):
+def detect_license_plate(image, lights, min_plate_area=200):
     if len(lights) < 2:
         return None  # Not enough light points to define ROI
 
@@ -116,8 +115,13 @@ def detect_license_plate(image, lights, min_plate_area=3):
 
 
 
+<<<<<<< HEAD
 frame1 = cv2.imread("C:/UNI/esami_vecchi/IACV/IACV_Project/videos/frames67/frame_0007.png")
 frame2 = cv2.imread("C:/UNI/esami_vecchi/IACV/IACV_Project/videos/frames67/frame_0014.png")
+=======
+frame1 = cv2.imread("outputFolder/frame_02.png")
+frame2 = cv2.imread("outputFolder/frame_04.png")
+>>>>>>> bdb2456837158455ff203c312197fa71f50dc474
 
 lights1, box1 = detect_red_lights(frame1)
 lights2, box2 = detect_red_lights(frame2)
@@ -145,7 +149,11 @@ cv2.imshow("Frame 2", frame2)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
 
+<<<<<<< HEAD
 frame = cv2.imread("C:/UNI/esami_vecchi/IACV/IACV_Project/videos/frames67/frame_0007.png")
+=======
+frame = cv2.imread("outputFolder/frame_02.png")
+>>>>>>> bdb2456837158455ff203c312197fa71f50dc474
 plate_box = detect_license_plate(frame, lights1)
 
 if plate_box:

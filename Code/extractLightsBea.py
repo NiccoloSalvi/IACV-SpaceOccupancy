@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-def detection(image_path, cfg_path="yolo/yolov4.cfg", weights_path="yolo/yolov4.weights", names_path="yolo/coco.names", confidence_threshold=0.27):
+def yolo_detection(image, cfg_path="yolo/yolov4.cfg", weights_path="yolo/yolov4.weights", names_path="yolo/coco.names", confidence_threshold=0.27):
     # Carica le classi
     with open(names_path, "r") as f:
         classes = [line.strip() for line in f.readlines()]
@@ -11,7 +11,6 @@ def detection(image_path, cfg_path="yolo/yolov4.cfg", weights_path="yolo/yolov4.
     layer_names = net.getUnconnectedOutLayersNames()
 
     # Carica un'immagine di test
-    image = cv2.imread(image_path)
     height, width = image.shape[:2]
 
     # Prepara l'immagine per YOLO
@@ -43,10 +42,10 @@ def detection(image_path, cfg_path="yolo/yolov4.cfg", weights_path="yolo/yolov4.
                 h = max(0, min(h, height - y - 1))
 
                 # Hide all pixels that are not in the bounding box
-                cut_image[0:int(y+h*0.2), 0:width] = 0 #Under the bounding box
-                cut_image[int(y+h*0.85):height, 0:width] = 0 #Above the bounding box
-                cut_image[y:y+h, 0:int(x-w*0.05)] = 0 #
-                cut_image[y:y+h, int(x+w*1.05):width] = 0
+                cut_image[0:int(y+h*0.3), 0:width] = 0 # Above the bounding box
+                cut_image[int(y+h*0.85):height, 0:width] = 0 # Under the bounding box
+                cut_image[y:y+h, 0:int(x-w*0.05)] = 0 # On the left of the bounding box
+                cut_image[y:y+h, int(x+w*1.05):width] = 0 # On the right of the bounding box
 
     # Save the image
     show_image = cut_image.copy()
@@ -190,8 +189,8 @@ def detect_license_plate(image, lights, min_plate_area=200):
 frame1 = cv2.imread("outputFolder/frame_02.png")
 frame2 = cv2.imread("outputFolder/frame_10.png")
 
-yolo_frame1 = detection("outputFolder/frame_02.png")
-yolo_frame2 = detection("outputFolder/frame_10.png")
+yolo_frame1 = yolo_detection(frame1)
+yolo_frame2 = yolo_detection(frame2)
 
 lights1, box1 = detect_red_lights(yolo_frame1)
 lights2, box2 = detect_red_lights(yolo_frame2)

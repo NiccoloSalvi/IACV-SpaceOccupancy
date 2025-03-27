@@ -23,7 +23,7 @@ for idx in frame_indices:
     cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
     success, frame = cap.read()
     if success:
-        print(f'Extracting frame {frame_num}/{qty}')
+        print(f'Extracting frame {saved_count + 1}/{qty}')
         filename = os.path.join(output_folder, f'frame_{saved_count:02d}.png')
         cv2.imwrite(filename, frame)
         saved_count += 1

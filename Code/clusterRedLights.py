@@ -3,40 +3,40 @@ import numpy as np
 from sklearn.cluster import DBSCAN
 
 def yolo_detection(image, cfg_path="yolo/yolov4.cfg", weights_path="yolo/yolov4.weights", names_path="yolo/coco.names", confidence_threshold=0.27):
-    # Carica le classi
+    # Load the classes
     with open(names_path, "r") as f:
         classes = [line.strip() for line in f.readlines()]
 
-    # Carica YOLO
+    # Load YOLO
     net = cv2.dnn.readNet(weights_path, cfg_path)
     layer_names = net.getUnconnectedOutLayersNames()
 
-    # Carica un'immagine di test
+    # Load a test image
     height, width = image.shape[:2]
 
-    # Prepara l'immagine per YOLO
+    # Prepare image for YOLO
     blob = cv2.dnn.blobFromImage(image, 1/255.0, (416, 416), swapRB=True, crop=False)
     net.setInput(blob)
 
-    # Esegui la rete neurale
+    # Execute neural network
     outputs = net.forward(layer_names)
 
-    # Analizza i risultati
+    # analyze the results
     cut_image = image.copy()
     for output in outputs:
         for detection in output:
-            scores = detection[5:]  # Probabilità per ogni classe
+            scores = detection[5:]  # Probability of each class
             class_id = np.argmax(scores)
             confidence = scores[class_id]
 
-            if confidence > confidence_threshold:  # Se è abbastanza sicuro
+            if confidence > confidence_threshold:
                 center_x, center_y, w, h = (detection[0:4] * np.array([width, height, width, height])).astype("int")
 
-                # Calcola l'angolo in alto a sinistra
+                # Compute the top left angle
                 x = int(center_x - w / 2)
                 y = int(center_y - h / 2)
 
-                # Disegna la BBox
+                # Draw the Bounding box
                 x = max(0, min(x, width - 1))
                 y = max(0, min(y, height - 1))
                 w = max(0, min(w, width - x - 1))

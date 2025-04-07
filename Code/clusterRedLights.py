@@ -111,7 +111,7 @@ def detect_red_lights(image):
 
 
 frame1 = cv2.imread("outputFolder/frame_07.png")
-frame2 = cv2.imread("outputFolder/frame_18.png")
+frame2 = cv2.imread("outputFolder/frame_10.png")
 
 yolo_frame1 = yolo_detection(frame1)
 yolo_frame2 = yolo_detection(frame2)
@@ -119,6 +119,7 @@ yolo_frame2 = yolo_detection(frame2)
 lights1 = detect_red_lights(yolo_frame1)
 lights2 = detect_red_lights(yolo_frame2)
 
+print("Lights 2:", lights2)
 #print original image with red lights
 for light in lights1:
     cv2.circle(frame1, light, 5, (0, 255, 0), -1)

@@ -46,13 +46,6 @@ def yolo_detection(image, cfg_path="yolo/yolov4.cfg", weights_path="yolo/yolov4.
                 cut_image[int(y+h*0.85):height, 0:width] = 0 # Under the bounding box
                 cut_image[y:y+h, 0:int(x-w*0.05)] = 0 # On the left of the bounding box
                 cut_image[y:y+h, int(x+w*1.05):width] = 0 # On the right of the bounding box
-
-    # Save the image
-    show_image = cut_image.copy()
-    show_image = cv2.resize(show_image, (show_image.shape[1] // 4, show_image.shape[0] // 4), interpolation=cv2.INTER_AREA)
-    cv2.imshow("Cut Image", show_image)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
     return cut_image
 
 
@@ -218,12 +211,13 @@ cv2.imshow("Frame 2", frame2)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
 
-frame = cv2.imread("outputFolder/frame_10.png")
+frame = cv2.imread("outputFolder/frame_09.png")
 plate_box = detect_license_plate(frame, lights2)
 
 if plate_box:
     x, y, w, h = plate_box
     cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 255), 5)
+    print(f"License Plate Box: {plate_box}")
     #cv2.putText(frame, "License Plate", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 else:
     print("No license plate detected")

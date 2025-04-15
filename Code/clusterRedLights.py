@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from sklearn.cluster import DBSCAN
+import matplotlib.pyplot as plt
 
 def yolo_detection(image, cfg_path="yolo/yolov4.cfg", weights_path="yolo/yolov4.weights", names_path="yolo/coco.names", confidence_threshold=0.27):
     # Load the classes
@@ -48,12 +49,6 @@ def yolo_detection(image, cfg_path="yolo/yolov4.cfg", weights_path="yolo/yolov4.
                 cut_image[y:y+h, 0:int(x-w*0.05)] = 0 # On the left of the bounding box
                 cut_image[y:y+h, int(x+w*1.05):width] = 0 # On the right of the bounding box
 
-    # Save the image
-    show_image = cut_image.copy()
-    show_image = cv2.resize(show_image, (show_image.shape[1] // 4, show_image.shape[0] // 4), interpolation=cv2.INTER_AREA)
-    cv2.imshow("Cut Image", show_image)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
     return cut_image
 
 
@@ -110,7 +105,7 @@ def detect_red_lights(image):
 
 
 
-frame1 = cv2.imread("outputFolder/frame_07.png")
+frame1 = cv2.imread("outputFolder/frame_02.png")
 frame2 = cv2.imread("outputFolder/frame_10.png")
 
 yolo_frame1 = yolo_detection(frame1)
@@ -131,8 +126,47 @@ cv2.line(frame1, L1, R1, (255, 0, 0), 5)
 for light in lights2:
     cv2.circle(frame2, light, 5, (0, 255, 0), -1)
 
-L2, R2 = lights2[0], lights2[1]
+L2, R2 = lights2[1], lights2[0]
 cv2.line(frame2, L2, R2, (255, 0, 0), 5)
+
+def to_homogeneous(point):
+    """Convert a 2D point to homogeneous coordinates."""
+    return np.array([point[0], point[1], 1])
+
+h = np.cross(to_homogeneous(L1), to_homogeneous(R1))
+k = np.cross(to_homogeneous(L2), to_homogeneous(R2))
+
+line_Y1 = np.cross(to_homogeneous(L1), to_homogeneous(L2))
+line_Y2 = np.cross(to_homogeneous(R1), to_homogeneous(R2))
+
+cv2.line(frame1, L1, L2, (0, 255, 0), 5)
+cv2.line(frame1, R1, R2, (0, 255, 0), 5)
+cv2.line(frame2, L1, L2, (0, 255, 0), 5)
+cv2.line(frame2, R1, R2, (0, 255, 0), 5)
+Vx = np.cross(k, h)
+Vy = np.cross(line_Y1, line_Y2)
+cv2.circle(frame1, (int(Vx[0]), int(Vx[1])), 5, (255, 0, 0), -1)
+cv2.circle(frame2, (int(Vy[0]), int(Vy[1])), 5, (255, 0, 0), -1)
+
+lineInfinity = np.cross(Vx, Vy)
+print("Line at infinity:", lineInfinity)
+
+# compute K-1 Vx
+K = np.array([
+    [2805.4324, 0, 1919.5735],
+    [0, 2805.4324, 1077.1753],
+    [0, 0, 1]
+], dtype=np.float32)
+
+K_inv = np.linalg.inv(K)
+K_inv_Vx = K_inv @ Vx
+K_inv_Vy = K_inv @ Vy
+print("K-1 Vy:", K_inv_Vy)
+print("K-1 Vx:", K_inv_Vx)
+
+# check if the points are in the same direction
+check = np.cross(K_inv_Vx, K_inv_Vy)
+print("Check:", check)
 
 frame1 = cv2.resize(frame1, (frame1.shape[1] // 4, frame1.shape[0] // 4), interpolation=cv2.INTER_AREA)
 frame2 = cv2.resize(frame2, (frame2.shape[1] // 4, frame2.shape[0] // 4), interpolation=cv2.INTER_AREA)

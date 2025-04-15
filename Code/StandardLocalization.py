@@ -16,7 +16,7 @@ frame = cv2.imread("outputFolder/frame_10.png")
 
 # Real world points (x, y, z) in millimeters
 object_points = np.array([
-    [606, 820.6, 132.1],     # LeftLicensPlate
+    [606, 820.6, 132.1],     # LeftLicensPlate 700.9 y
     [1126, 820.6, 132.1],    # RightLicensPlate
     [137.5, 791.7, 183.2],   # LeftLight
     [1594.5, 791.7, 183.2]   # RightLight
@@ -32,11 +32,17 @@ image_points = np.array([
 ], dtype=np.float32)
 
 # Convert to numpy arrays
+# K IOS API
 K = np.array([
     [2805.4324, 0, 1919.5735],
     [0, 2805.4324, 1077.1753],
     [0, 0, 1]
 ], dtype=np.float32)
+
+# K = OPENCV
+#    [1399.6365, 0, 961.83606],
+#    [0, 1399.6365, 538.7572],
+#    [0, 0, 1]
 
 # Solve for rotation and translation
 success, rvec, tvec = cv2.solvePnP(

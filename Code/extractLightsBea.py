@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
 
 def yolo_detection(image, cfg_path="yolo/yolov4.cfg", weights_path="yolo/yolov4.weights", names_path="yolo/coco.names", confidence_threshold=0.27):
     # Load the classes
@@ -40,12 +41,20 @@ def yolo_detection(image, cfg_path="yolo/yolov4.cfg", weights_path="yolo/yolov4.
                 y = max(0, min(y, height - 1))
                 w = max(0, min(w, width - x - 1))
                 h = max(0, min(h, height - y - 1))
+                # print the size of the bounding box
+                # print the position of the bounding box
 
                 # Hide all pixels that are not in the bounding box
                 cut_image[0:int(y+h*0.3), 0:width] = 0 # Above the bounding box
                 cut_image[int(y+h*0.85):height, 0:width] = 0 # Under the bounding box
                 cut_image[y:y+h, 0:int(x-w*0.05)] = 0 # On the left of the bounding box
                 cut_image[y:y+h, int(x+w*1.05):width] = 0 # On the right of the bounding box
+    # Save the image
+    show_image = cut_image.copy()
+    show_image = cv2.resize(show_image, (show_image.shape[1] // 4, show_image.shape[0] // 4), interpolation=cv2.INTER_AREA)
+    cv2.imshow("Cut Image", show_image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
     return cut_image
 
 
@@ -177,10 +186,21 @@ def detect_license_plate(image, lights, min_plate_area=200):
 
     return best_plate
 
+def project_3d(K, points):
+    homo_coords = np.array([points[0], points[1], 1.0])
+    # find direction
+    dir = np.linalg.inv(K) @ homo_coords
+    dir = dir / np.linalg.norm(dir)
+    return dir
 
+def to_line(p1, p2):
+    return np.cross(p1, p2)
 
-frame1 = cv2.imread("outputFolder/frame_02.png")
-frame2 = cv2.imread("outputFolder/frame_10.png")
+def to_homogeneous(p):
+    return np.array([p[0], p[1], 1.0])
+
+frame1 = cv2.imread("OutputFolder/frame_02.png")
+frame2 = cv2.imread("OutputFolder/frame_11.png")
 
 yolo_frame1 = yolo_detection(frame1)
 yolo_frame2 = yolo_detection(frame2)
@@ -203,26 +223,39 @@ cv2.line(frame1, L1, R1, (255, 0, 0), 5)
 L2, R2 = lights2[0], lights2[1]
 cv2.line(frame2, L2, R2, (255, 0, 0), 5)
 
-frame1 = cv2.resize(frame1, (frame1.shape[1] // 4, frame1.shape[0] // 4), interpolation=cv2.INTER_AREA)
-frame2 = cv2.resize(frame2, (frame2.shape[1] // 4, frame2.shape[0] // 4), interpolation=cv2.INTER_AREA)
+print(f'L1:{L1}')
+print(f'R1:{R1}')
+print(f'L2:{L2}')
+print(f'R2:{R2}')
+
+
+#frame1 = cv2.resize(frame1, (frame1.shape[1] // 4, frame1.shape[0] // 4), interpolation=cv2.INTER_AREA)
+#frame2 = cv2.resize(frame2, (frame2.shape[1] // 4, frame2.shape[0] // 4), interpolation=cv2.INTER_AREA)
 
 cv2.imshow("Frame 1", frame1)
 cv2.imshow("Frame 2", frame2)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
 
-frame = cv2.imread("outputFolder/frame_09.png")
+frame = cv2.imread("OutputFolder/frame_11.png")
 plate_box = detect_license_plate(frame, lights2)
 
 if plate_box:
     x, y, w, h = plate_box
     cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 255), 5)
-    print(f"License Plate Box: {plate_box}")
+    #print(f"License Plate Box: {plate_box}")
     #cv2.putText(frame, "License Plate", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 else:
     print("No license plate detected")
 
-frame = cv2.resize(frame, (frame.shape[1] // 4, frame.shape[0] // 4), interpolation=cv2.INTER_AREA)
+#frame = cv2.resize(frame, (frame.shape[1] // 4, frame.shape[0] // 4), interpolation=cv2.INTER_AREA)
 cv2.imshow("Frame with Plate", frame)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
+
+# Camera intrinsics
+K = np.array([
+    [3298, 0, 1908],
+    [0, 3302, 1071],
+    [0, 0, 1]
+], dtype=np.float64)

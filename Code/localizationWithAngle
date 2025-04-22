@@ -1,0 +1,51 @@
+import cv2
+import numpy as np
+
+
+# calculate distance between points
+def calculate_distance(p1, p2):
+    return np.linalg.norm(np.array(p1) - np.array(p2))
+
+frame = cv2.imread("outputFolder/frame_10.png")
+
+image_points = np.array([
+    [1216, 1556],  # LeftInternal
+    [1688, 1552],  # RightInternal
+    [1152, 1544],  # LeftExternal
+    [1784, 1536]  # RightExternal
+], dtype=np.float32)
+
+image_points = image_points.astype(int)
+
+# Draw lines between points
+cv2.line(frame, tuple(image_points[0]), tuple(image_points[1]), (0, 255, 0), 5)
+cv2.line(frame, tuple(image_points[0]), tuple(image_points[2]), (255, 0, 0), 5)
+cv2.line(frame, tuple(image_points[1]), tuple(image_points[3]), (255, 0, 0), 5)
+
+long = calculate_distance(image_points[0], image_points[1])
+shortLeft = calculate_distance(image_points[0], image_points[2])
+shortRight = calculate_distance(image_points[1], image_points[3])
+
+real_long = 1020
+real_short = 230
+
+print("Long:", long)
+print("Short Left:", shortLeft)
+print("Short Right:", shortRight)
+
+prop_left = long / shortLeft
+prop_right = long / shortRight
+proportion = real_long / real_short
+
+print("Real Proportion:", proportion)
+print("Proportion Left:", prop_left)
+print("Proportion Right:", prop_right)
+
+theta = np.arccos(shortLeft / long)
+
+print("Theta:", theta)
+
+frame = cv2.resize(frame, (frame.shape[1] // 4, frame.shape[0] // 4), interpolation=cv2.INTER_AREA)
+cv2.imshow("Image with Lines", frame)
+cv2.waitKey(0)
+cv2.destroyAllWindows()

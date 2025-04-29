@@ -1,51 +1,121 @@
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
 
+# transforms 2d points to homogeneous coordinates
+def to_homogeneous(p):
+    return np.array([p[0], p[1], 1.0])
 
-# calculate distance between points
-def calculate_distance(p1, p2):
-    return np.linalg.norm(np.array(p1) - np.array(p2))
+def project_point(K, point_3D):
+    point_3D = point_3D.reshape(3, 1)  # Colonna
+    point_2D_homogeneous = K @ point_3D  # Matrice intrinseca
+    point_2D = point_2D_homogeneous[:2] / point_2D_homogeneous[2]  # Divide per z
+    return point_2D
 
-frame = cv2.imread("outputFolder/frame_10.png")
+img = cv2.imread("OutputFolder/frame_02.png")
 
-image_points = np.array([
-    [1216, 1556],  # LeftInternal
-    [1688, 1552],  # RightInternal
-    [1152, 1544],  # LeftExternal
-    [1784, 1536]  # RightExternal
+# Camera intrinsics matrix
+K = np.array([
+    [3315.65306, 0.0, 1910.87753],
+    [0.0, 3319.89314, 1072.38815],
+    [0.0, 0.0, 1.0]
 ], dtype=np.float32)
 
-image_points = image_points.astype(int)
+# Car dimensions from CAD model (in meters)
+car_width = 1.732
+car_length = 3.997
+car_height = 1.467
+taillight_height = 0.950
 
-# Draw lines between points
-cv2.line(frame, tuple(image_points[0]), tuple(image_points[1]), (0, 255, 0), 5)
-cv2.line(frame, tuple(image_points[0]), tuple(image_points[2]), (255, 0, 0), 5)
-cv2.line(frame, tuple(image_points[1]), tuple(image_points[3]), (255, 0, 0), 5)
+# ========= Inputs ========= #
+# Input points (taillights)
+L1 = [318, 2212]
+R1 = [1452, 2240]
+L2 = [1211, 1464]
+R2 = [1839, 1455]
 
-long = calculate_distance(image_points[0], image_points[1])
-shortLeft = calculate_distance(image_points[0], image_points[2])
-shortRight = calculate_distance(image_points[1], image_points[3])
+# Vettore che unisce i due taillights sul piano immagine
+taillight_vector = np.array(R1) - np.array(L1)
 
-real_long = 1020
-real_short = 230
+# Calcolo dell'angolo rispetto all'asse x (orizzontale immagine)
+angle_rad = np.arctan2(taillight_vector[1], taillight_vector[0])  # atan2(dy, dx)
+angle_deg = np.degrees(angle_rad)
 
-print("Long:", long)
-print("Short Left:", shortLeft)
-print("Short Right:", shortRight)
+# Se vuoi l'angolo assoluto (senza segno)
+angle_deg = np.abs(angle_deg)
 
-prop_left = long / shortLeft
-prop_right = long / shortRight
-proportion = real_long / real_short
+print(f"Angolo tra linea taillights e orizzontale immagine: {angle_deg:.2f}°")
 
-print("Real Proportion:", proportion)
-print("Proportion Left:", prop_left)
-print("Proportion Right:", prop_right)
+K_inv = np.linalg.inv(K)
 
-theta = np.arccos(shortLeft / long)
+# Project taillights into 3D rays
+L1_ray = K_inv @ to_homogeneous(L1)
+R1_ray = K_inv @ to_homogeneous(R1)
+L1_ray /= np.linalg.norm(L1_ray)
+R1_ray /= np.linalg.norm(R1_ray)
 
-print("Theta:", theta)
+# Angle between rays to get scale
+# computes angle between the rays pointing to the taillights
+# to then find the distance between the back of the car and the camera
+# the distance is computed by exploiting trigonometric geometry
+theta = np.arccos(np.clip(np.dot(L1_ray, R1_ray), -1, 1))
+d = car_width / (2 * np.sin(theta / 2))
 
-frame = cv2.resize(frame, (frame.shape[1] // 4, frame.shape[0] // 4), interpolation=cv2.INTER_AREA)
-cv2.imshow("Image with Lines", frame)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+# Coordinate 3D dei taillights
+L1_3D = d * L1_ray
+R1_3D = d * R1_ray
+
+# Centro tra i taillights
+center_back_car = (L1_3D + R1_3D) / 2
+
+# Angolo di rotazione (camera rispetto auto)
+rotation_angle_rad = np.deg2rad(angle_deg)
+
+# Matrice di rotazione attorno all'asse y (verticale)
+R = np.array([
+    [np.cos(rotation_angle_rad), 0, np.sin(rotation_angle_rad)],
+    [0, 1, 0],
+    [-np.sin(rotation_angle_rad), 0, np.cos(rotation_angle_rad)]
+])
+
+# ========== Step 2: Definisci punti locali sull'auto ========== #
+
+# Punti 3D locali rispetto al centro dietro l'auto
+# Es: targa centrata a 0.4 m sopra i taillights
+points_local = {
+    "plate_center": np.array([0.0, 0.0, 0.0]),
+    "ground_center": np.array([0.0, taillight_height, 0.0]),
+    "left_mirror": np.array([-car_width/2, -0.2, car_length]),
+    "right_mirror": np.array([car_width/2, -0.2, car_length]),
+}
+
+# ========== Step 3: Trasforma in mondo 3D ========== #
+
+points_world = {}
+for name, p_local in points_local.items():
+    p_world = center_back_car + (R @ p_local)  # prima ruota, poi trasla
+    points_world[name] = p_world
+
+# ========== Step 4: Output ========== #
+
+for name, p_world in points_world.items():
+    print(f"{name}: {p_world}")
+
+
+# Proietta e disegna
+for name, point_3D in points_world.items():
+    point_2D = project_point(K, point_3D)
+    point_2D = np.round(point_2D).flatten()
+    point_2D = tuple(int(x.item()) for x in point_2D)
+
+    
+    # Disegna il punto sull'immagine
+    cv2.circle(img, point_2D, 10, (0, 0, 255), -1)  # Rosso
+    cv2.putText(img, name, (point_2D[0]+10, point_2D[1]), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2)
+
+# Mostra immagine
+plt.figure(figsize=(12,8))
+plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+plt.title('Punti 3D proiettati sull\'immagine')
+plt.axis('off')
+plt.show()

@@ -43,8 +43,8 @@ angle_deg = np.degrees(angle_rad)
 
 # Se vuoi l'angolo assoluto (senza segno)
 angle_deg = np.abs(angle_deg)
-
-print(f"Angolo tra linea taillights e orizzontale immagine: {angle_deg:.2f}°")
+angle_deg = 1.414423211402155100557820333051495254039764404296875
+print(f"Angolo tra linea taillights e orizzontale immagine: {angle_deg:.50f}°")
 
 K_inv = np.linalg.inv(K)
 
@@ -89,6 +89,17 @@ points_local = {
     "right_mirror": np.array([car_width/2, -0.2, car_length]),
 }
 
+bounding_box = {
+    "rear_bottom_left": np.array([-car_width/2, taillight_height, 0]),
+    "rear_bottom_right": np.array([car_width/2, taillight_height, 0]),
+    "front_bottom_left": np.array([-car_width/2, taillight_height, car_length]),
+    "front_bottom_right": np.array([car_width/2, taillight_height, car_length]),
+    "rear_top_left": np.array([-car_width/2, -taillight_height, 0]),
+    "rear_top_right": np.array([car_width/2, -taillight_height, 0]),
+    "front_top_left": np.array([-car_width/2, -taillight_height, car_length]),
+    "front_top_right": np.array([car_width/2, -taillight_height, car_length]),
+}
+
 # ========== Step 3: Trasforma in mondo 3D ========== #
 
 points_world = {}
@@ -96,22 +107,52 @@ for name, p_local in points_local.items():
     p_world = center_back_car + (R @ p_local)  # prima ruota, poi trasla
     points_world[name] = p_world
 
+bounding_box_world = {}
+for name, p_local in bounding_box.items():
+    p_world = center_back_car + (R @ p_local)  # prima ruota, poi trasla
+    bounding_box_world[name] = p_world
+
 # ========== Step 4: Output ========== #
 
 for name, p_world in points_world.items():
     print(f"{name}: {p_world}")
 
 
-# Proietta e disegna
-for name, point_3D in points_world.items():
+# Proietta e disegna la bounding box
+projected_points = {}
+for name, point_3D in bounding_box_world.items():
     point_2D = project_point(K, point_3D)
     point_2D = np.round(point_2D).flatten()
     point_2D = tuple(int(x.item()) for x in point_2D)
 
+    projected_points[name] = point_2D
     
     # Disegna il punto sull'immagine
-    cv2.circle(img, point_2D, 10, (0, 0, 255), -1)  # Rosso
+    cv2.circle(img, point_2D, 10, (0, 0, 255), -1)
     cv2.putText(img, name, (point_2D[0]+10, point_2D[1]), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2)
+
+# Step 2: Define edges between points for the 3D bounding box
+edges = [
+    ("rear_bottom_left", "rear_bottom_right"),
+    ("rear_bottom_right", "front_bottom_right"),
+    ("front_bottom_right", "front_bottom_left"),
+    ("front_bottom_left", "rear_bottom_left"),
+
+    ("rear_top_left", "rear_top_right"),
+    ("rear_top_right", "front_top_right"),
+    ("front_top_right", "front_top_left"),
+    ("front_top_left", "rear_top_left"),
+
+    ("rear_bottom_left", "rear_top_left"),
+    ("rear_bottom_right", "rear_top_right"),
+    ("front_bottom_right", "front_top_right"),
+    ("front_bottom_left", "front_top_left")
+]
+
+# Step 3: Draw lines between connected points
+for start, end in edges:
+    if start in projected_points and end in projected_points:
+        cv2.line(img, projected_points[start], projected_points[end], (0, 255, 0), 10)
 
 # Mostra immagine
 plt.figure(figsize=(12,8))

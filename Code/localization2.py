@@ -27,10 +27,10 @@ def draw_box(ax, pts2d, color='lime'):
 
 # ========= Inputs ========= #
 # Input points (taillights)
-L1 = [318, 2212]
-R1 = [1452, 2240]
-L2 = [1211, 1464]
-R2 = [1839, 1455]
+L1 = [318, 2286]
+R1 = [1452, 2326]
+L2 = [1211, 1504]
+R2 = [1839, 1508]
 
 lights1 = [L1, R1]
 lights2 = [L2, R2]
@@ -50,7 +50,7 @@ K = np.array([
 car_width = 1.732
 car_length = 3.997
 car_height = 1.467
-taillight_height = 0.950
+taillight_height = 0.812
 
 
 # ========= Geometry computations ========= #

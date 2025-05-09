@@ -83,6 +83,7 @@ def detect_red_lights(image, min_area=3):
     contours = sorted(contours, key=cv2.contourArea, reverse=True)
 
     red_lights = []
+    red_lights_lower = []
     boxes = []
 
     for cnt in contours[:2]:
@@ -109,7 +110,18 @@ def detect_red_lights(image, min_area=3):
         cy = y + h // 2
         red_lights.append((cx, cy))
 
-    return red_lights, boxes
+    for idx, (x, y, w, h) in enumerate(boxes):
+        # Get lower outer edge point
+        if idx == 0:
+            # Left light: bottom-left corner
+            cx = x
+        else:
+            # Right light: bottom-right corner
+            cx = x + w
+        cy = y + h
+        red_lights_lower.append((cx, cy))
+
+    return red_lights_lower, red_lights, boxes
 
 
 def detect_license_plate(image, lights, min_plate_area=200):
@@ -205,8 +217,8 @@ frame2 = cv2.imread("OutputFolder/frame_11.png")
 yolo_frame1 = yolo_detection(frame1)
 yolo_frame2 = yolo_detection(frame2)
 
-lights1, box1 = detect_red_lights(yolo_frame1)
-lights2, box2 = detect_red_lights(yolo_frame2)
+lights1, lights1_center, box1 = detect_red_lights(yolo_frame1)
+lights2, lights2_center, box2 = detect_red_lights(yolo_frame2)
 
 # draw detections
 for pt in lights1:
@@ -238,7 +250,7 @@ cv2.waitKey(0)
 cv2.destroyAllWindows()
 
 frame = cv2.imread("OutputFolder/frame_11.png")
-plate_box = detect_license_plate(frame, lights2)
+plate_box = detect_license_plate(frame, lights2_center)
 
 if plate_box:
     x, y, w, h = plate_box

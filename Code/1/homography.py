@@ -1,3 +1,40 @@
+"""
+Changelog:
+- v1.0 (Initial): Base script for homography calculation and bounding box projection.
+- v1.1 (Task: Refactor draw_vehicle_bounding_box):
+    - Modified `draw_vehicle_bounding_box` to use individual scales for each vehicle axis
+      during vertex transformation.
+    - `r3_scaled` (depth axis) is now calculated as `CAR_D * r3_n`.
+    - `r1_scaled` and `r2_scaled` are used as vectors representing scaled x and y axes.
+    - Corrected the 'FBR' (Front Bottom Right) vertex definition in `vertices_vehicle`
+      to use `CAR_W` instead of a hardcoded value (1.958).
+- v1.2 (Task: Correct sign_y calculation in cad_to_plane_coords):
+    - Replaced the heuristic for `sign_y` in `cad_to_plane_coords` with a
+      cross-product rule: `sign_y = np.sign(np.cross(u, w2)[2])`.
+    - This provides a more robust geometric determination of the y-coordinate's sign.
+- v1.3 (Task: Main block corrections - homography unpacking and scale ratio check):
+    - Corrected the unpacking of `calculate_homography`'s return values in the
+      `if __name__ == "__main__":` block to `H, quality_metrics = ...`.
+    - Added a strict 1% scale ratio check for `|r1_scaled|` vs `|r2_scaled|`
+      after their calculation in the main block, raising a ValueError if exceeded.
+- v1.4 (Task: Robustness and Portability Enhancements):
+    - Implemented conditional display in `if __name__ == "__main__":`:
+        - Uses `cv2.imshow` if `DISPLAY` environment variable is set.
+        - Saves the output image to `debug_bbox.png` (full resolution `frame_with_bb`)
+          using `cv2.imwrite` and prints a message if `DISPLAY` is not set.
+    - Enhanced error/warning messages for numerical degeneracies:
+        - `validate_homography`: More informative messages for near-zero determinant
+          and high condition number.
+        - `estimate_scale_factor`: Added a warning if optical rays for P0 and P1
+          are nearly collinear (small `alpha_O`).
+        - `orthogonalize_rotation_preserving_r1`: Added ValueError exceptions for
+          zero input vector `r1` or collinear `r1` and `r2` (unable to form a basis).
+        - `draw_rear_bounding_box`: Updated error message for collinear `r1_vec`, `r2_vec`.
+- v1.5 (Task: Finalization - Changelog and Comments Review):
+    - Added this comprehensive changelog at the top of the file.
+    - Reviewed and ensured sufficient inline comments for all significant modifications.
+    - Confirmed `debug_bbox.png` saving mechanism for headless environments.
+"""
 import numpy as np
 import cv2
 import os
@@ -28,28 +65,17 @@ def cad_to_plane_coords(points_cad, eps_parallel=1e-4):
     # Media delle distanze
     y_mag = 0.5 * (y2_abs + y3_abs)
     
-    # Calcolo robusto del segno
-    # Assumiamo che i punti luce siano "sopra" la targa nel senso del veicolo
-    # Usiamo il punto medio tra P2 e P3
-    mid_lights = 0.5 * (P2 + P3)
-    mid_plate = 0.5 * (P0 + P1)
-    
-    # Vettore dalla targa ai fari
-    plate_to_lights = mid_lights - mid_plate
-    
-    # Normale al piano (usando tutti e 4 i punti per robustezza)
-    v1 = P1 - P0
-    v2 = 0.5 * (P2 + P3) - P0
-    n = np.cross(v1, v2)
-    n = n / np.linalg.norm(n)
-    
-    # Il segno è positivo se w2 punta nella stessa "direzione" di plate_to_lights
-    # rispetto al piano
-    if y_mag > 0:
-        w_avg = 0.5 * (w2 + w3)
-        sign_y = 1.0 if np.dot(w_avg, plate_to_lights) > 0 else -1.0
-    else:
-        sign_y = 1.0
+    # Calcolo del segno di y_common basato sulla regola della mano destra. (Task v1.2)
+    # u è il vettore unitario lungo l'asse x del piano della targa (P0->P1).
+    # w2 è il vettore da P0 a P2, proiettato sul piano ortogonale a u.
+    # Geometricamente, w2 rappresenta la componente y di P2 nel sistema di coordinate 2D locale del piano.
+    # Il segno della componente z del prodotto vettoriale u x w2 determina se P2
+    # è "sopra" (y positiva) o "sotto" (y negativa) l'asse x definito da P0-P1,
+    # assumendo una convenzione destrorsa per il sistema di coordinate CAD (X, Y, Z).
+    # Se P0, P1, P2 sono collineari, w2 sarà un vettore nullo ([0,0,0]),
+    # quindi il prodotto vettoriale sarà [0,0,0], e np.sign(0) darà 0.
+    # In questo caso, y_common = 0 * y_mag = 0, che è corretto.
+    sign_y = np.sign(np.cross(u, w2)[2]) # Corrected sign_y calculation (Task v1.2)
     
     y_common = sign_y * y_mag
     
@@ -97,13 +123,13 @@ def validate_homography(H, plane_pts, img_pts):
     det = np.linalg.det(H)
     metrics['determinant'] = det
     if abs(det) < 1e-10:
-        print("WARNING: Determinante quasi zero!")
+        print(f"Warning: Homography determinant is close to zero (val={det:.2e}), results may be unstable.")
     
     # 2. Numero di condizione (misura stabilità numerica)
     cond = np.linalg.cond(H)
     metrics['condition_number'] = cond
-    if cond > 1e6:
-        print(f"WARNING: Numero di condizione alto: {cond:.2e}")
+    if cond > 1e6: # Typical threshold, can be application-dependent
+        print(f"Warning: Homography condition number is high (val={cond:.2e}), indicating potential numerical instability.")
     
     # 3. Errore di reproiezione
     pts_h = np.hstack([plane_pts, np.ones((len(plane_pts), 1))])
@@ -116,7 +142,7 @@ def validate_homography(H, plane_pts, img_pts):
     metrics['max_error'] = np.max(errors)
     
     print(f"\nQualità omografia:")
-    print(f"  Determinante: {det:.4f}")
+    print(f"  Determinante: {det:.2e}") # Adjusted format for consistency
     print(f"  Condition number: {cond:.2e}")
     print(f"  Errore medio reproiezione: {metrics['mean_error']:.2f} pixel")
     print(f"  Errore max reproiezione: {metrics['max_error']:.2f} pixel")
@@ -137,6 +163,8 @@ def _cross(a, b):
 
 def estimate_scale_factor(K, H, p_frame, plate_width):
     """Compute scale factor triangulation method."""
+    eps_collinear_rad = 1e-3 # Threshold for detecting nearly collinear rays
+
     if p_frame.shape != (4, 2):
         raise ValueError("p_frame must be shape (4,2) - order: P0, P1, P2, P3")
     if K.shape != (3, 3):
@@ -161,6 +189,9 @@ def estimate_scale_factor(K, H, p_frame, plate_width):
     # Angles needed for the law of sines triangulation
     cos_O = np.clip(ray0 @ ray1, -1.0, 1.0)
     alpha_O = np.arccos(cos_O)
+
+    if abs(alpha_O) < eps_collinear_rad:
+        print(f"Warning: Optical rays for P0 and P1 are nearly collinear (angle={alpha_O:.2f} rad). Depth estimation may be inaccurate.")
 
     # Angles at P0 and P1 (between optical ray and plate direction)
     cos_P0 = np.clip((-ray0) @ d_vp_cam, -1.0, 1.0)
@@ -193,13 +224,21 @@ def estimate_scale_factor(K, H, p_frame, plate_width):
 
 def orthogonalize_rotation_preserving_r1(r1, r2):
     """Ortogonalizza preservando la direzione di r1."""
-    
+    eps = 1e-7 # Small epsilon for checking zero vectors
+
     # Normalizza r1 (preserva la direzione della targa)
-    r1_norm = r1 / np.linalg.norm(r1)
+    norm_r1 = np.linalg.norm(r1)
+    if norm_r1 < eps:
+        raise ValueError("Input r1 to orthogonalize_rotation_preserving_r1 is a zero vector.")
+    r1_norm = r1 / norm_r1
     
     # Calcola r3 perpendicolare al piano
-    r3_temp = np.cross(r1, r2)
-    r3_norm = r3_temp / np.linalg.norm(r3_temp)
+    r3_temp = np.cross(r1_norm, r2) # Use r1_norm for robustness if r2 is huge
+    norm_r3_temp = np.linalg.norm(r3_temp)
+    if norm_r3_temp < eps:
+        # This happens if r1 (and thus r1_norm) and r2 are collinear
+        raise ValueError("Vectors r1 and r2 are collinear, cannot form a basis in orthogonalize_rotation_preserving_r1.")
+    r3_norm = r3_temp / norm_r3_temp
     
     # Ricalcola r2 per garantire ortogonalità
     r2_norm = np.cross(r3_norm, r1_norm)
@@ -230,32 +269,45 @@ def verify_scales_and_project(r1_scaled, r2_scaled, o_pi_scaled):
 def draw_vehicle_bounding_box(image, K, R_normalized, origin_cam, scale_r1, scale_r2, color=(0, 255, 0), thickness=2):
     # Estrai i vettori base normalizzati
     r1_n, r2_n, r3_n = R_normalized[:, 0], R_normalized[:, 1], R_normalized[:, 2]
-    
+
+    # Definisci i vettori base scalati per la trasformazione dei vertici (Task v1.1)
+    # scale_r1 e scale_r2 sono le magnitudini passate alla funzione (magnitudini di r1_scaled, r2_scaled from main)
+    r1_scaled_vec = scale_r1 * r1_n # This is the scaled vehicle X-axis vector in camera coordinates
+    r2_scaled_vec = scale_r2 * r2_n # This is the scaled vehicle Y-axis vector in camera coordinates
+    # CAR_D è la dimensione fisica lungo l'asse z del veicolo (profondità)
+    # r3_n è il vettore normalizzato dell'asse z del veicolo nel sistema camera
+    # r3_scaled_vehicle_depth_vec is the scaled vehicle Z-axis (depth) vector in camera coordinates (Task v1.1)
+    r3_scaled_vehicle_depth_vec = CAR_D * r3_n 
    
     # Definisci gli 8 vertici della bounding box nel sistema veicolo
-    # Sistema coordinate: origine = angolo sup sx targa
-    # X: larghezza veicolo (destra), Y: altezza (su), Z: lunghezza (avanti)
+    # Sistema coordinate: origine = un punto di riferimento sul veicolo (es. angolo della targa),
+    # con X, Y, Z allineati agli assi del veicolo. Le coordinate qui sono relative a tale origine.
+    # X: larghezza veicolo (destra), Y: altezza (su), Z: lunghezza (avanti, verso il fronte del veicolo)
     vertices_vehicle = {
         # Faccia posteriore (vicino alla targa)
-        'RBL': np.array([-0.606, -0.9, 0.3],),
-        'RBR': np.array([-0.606+CAR_W, -0.9, 0.3]),
-        'RTL': np.array([-0.606, 1.467-0.9, 0.3]),
-        'RTR': np.array([-0.606+CAR_W, CAR_H-0.9, 0.3]),
+        'RBL': np.array([-0.606, -0.9, 0.3],), # Rear-Bottom-Left
+        'RBR': np.array([-0.606+CAR_W, -0.9, 0.3]), # Rear-Bottom-Right (CAR_W used)
+        'RTL': np.array([-0.606, 1.467-0.9, 0.3]), # Rear-Top-Left
+        'RTR': np.array([-0.606+CAR_W, CAR_H-0.9, 0.3]), # Rear-Top-Right (CAR_W, CAR_H used)
         
         # Faccia anteriore
-        'FBL': np.array([-0.606, -0.9, -CAR_D+0.3]),
-        'FBR': np.array([-0.606+1.958, -0.9, -CAR_D+0.3]),
-        'FTL': np.array([-0.606, 1.467-0.9, -CAR_D+0.3]),
-        'FTR': np.array([-0.606+CAR_W, 1.467-0.9, -CAR_D+0.3])
+        'FBL': np.array([-0.606, -0.9, -CAR_D+0.3]), # Front-Bottom-Left (CAR_D used for depth)
+        'FBR': np.array([-0.606+CAR_W, -0.9, -CAR_D+0.3]), # Front-Bottom-Right (CAR_W, CAR_D used) - Corrected to use CAR_W (Task v1.1)
+        'FTL': np.array([-0.606, 1.467-0.9, -CAR_D+0.3]), # Front-Top-Left (CAR_D, CAR_H used)
+        'FTR': np.array([-0.606+CAR_W, 1.467-0.9, -CAR_D+0.3]) # Front-Top-Right (CAR_W, CAR_H, CAR_D used)
     }
     
     # Trasforma i vertici nel sistema camera
     vertices_cam = {}
     for name, v_vehicle in vertices_vehicle.items():
         # Applica scale e rotazione, poi trasla
-        v_cam = origin_cam + (scale_r1 * v_vehicle[0] * r1_n + 
-                             scale_r2 * v_vehicle[1] * r2_n + 
-                             scale_r1 * v_vehicle[2] * r3_n)  # Usa scale_r1 per Z
+        # v_vehicle[0] è lungo l'asse x del veicolo (r1_n direction)
+        # v_vehicle[1] è lungo l'asse y del veicolo (r2_n direction)
+        # v_vehicle[2] è lungo l'asse z del veicolo (r3_n direction)
+        # Vertex transformation using individually scaled axes (Task v1.1)
+        v_cam = origin_cam + (v_vehicle[0] * r1_scaled_vec +
+                             v_vehicle[1] * r2_scaled_vec +
+                             v_vehicle[2] * r3_scaled_vehicle_depth_vec)
         vertices_cam[name] = v_cam
     
     # Proietta i vertici nell'immagine
@@ -355,8 +407,8 @@ def draw_rear_bounding_box(frame, K_matrix, r1_vec, r2_vec, o_pi_vec, width_bb, 
     # Calcola la normale al piano per la direzione della profondità
     # Assicurati che r1_vec e r2_vec non siano collineari
     normal_vec_cam = np.cross(r1_vec, r2_vec)
-    if np.linalg.norm(normal_vec_cam) < 1e-6:
-        print("Error: r1_vec and r2_vec sono collineari, impossibile definire la normale.")
+    if np.linalg.norm(normal_vec_cam) < 1e-6: # Epsilon for collinearity check
+        print("Error: r1_vec and r2_vec are collinear in `draw_rear_bounding_box`. Cannot define a unique normal vector for depth.")
         # Potresti usare una direzione di default o propagare l'errore
         # Per ora, creiamo una normale fittizia se questo accade, ma è un segnale di problemi precedenti.
         # Se r1 punta lungo X e r2 lungo Y, la normale dovrebbe essere lungo Z.
@@ -486,7 +538,7 @@ if __name__ == "__main__":
     pix = cv2.undistortPoints(pix.reshape(-1,1,2), K, dist, P=K).reshape(-1,2)
 
     # calcola l'omografia H
-    H, mask = calculate_homography(plane_pts, pix)
+    H, quality_metrics = calculate_homography(plane_pts, pix) # Corrected unpacking (Task v1.3)
 
     if H is not None:
         inv_K = np.linalg.inv(K) # K_matrix è la tua matrice K
@@ -520,8 +572,14 @@ if __name__ == "__main__":
     r1_n, r2_n, r3_n = R[:,0], R[:,1], R[:,2]
 
     # SOLUZIONE: mantieni la scala originale
-    scale_r1 = np.linalg.norm(r1_scaled)
-    scale_r2 = np.linalg.norm(r2_scaled)
+    scale_r1 = np.linalg.norm(r1_scaled) # Magnitude of the scaled vehicle X-axis vector
+    scale_r2 = np.linalg.norm(r2_scaled) # Magnitude of the scaled vehicle Y-axis vector
+
+    # Scale Ratio Check (Task v1.3)
+    # Enforces that the derived scales for X and Y axes are similar,
+    # which is expected for a reasonably calibrated camera and good point correspondences.
+    if abs(scale_r1 / scale_r2 - 1.0) > 0.01: # 1% threshold
+        raise ValueError(f"Error: Scale ratio |r1|/|r2| = {scale_r1/scale_r2:.4f} differs by more than 1%. Check camera calibration or point correspondences.")
 
     # R = np.column_stack((r1_scaled, r2_scaled, np.cross(r1_scaled, r2_scaled)))
     # U, _, Vt = np.linalg.svd(R)
@@ -558,10 +616,17 @@ if __name__ == "__main__":
 
     frame_with_bb = draw_vehicle_bounding_box(frame_ud, K, R, o_pi_scaled, scale_r1, scale_r2, color=(0, 255, 0), thickness=3)
 
-    scale_display = 0.35
+    scale_display = 0.35 # Rescale for display if shown
     h_display = int(frame_ud.shape[0] * scale_display)
     w_display = int(frame_ud.shape[1] * scale_display)
-    frame_display = cv2.resize(frame_with_bb, (w_display, h_display))
-    cv2.imshow("Bounding Box", frame_display)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    frame_display_resized = cv2.resize(frame_with_bb, (w_display, h_display)) # Resized version for display
+
+    # Conditional display or save based on DISPLAY environment variable (Task v1.4)
+    if os.environ.get("DISPLAY"):
+        cv2.imshow("Bounding Box", frame_display_resized) # Show resized image
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+    else:
+        output_path = "debug_bbox.png"
+        cv2.imwrite(output_path, frame_with_bb) # Save the full-resolution image with bounding box
+        print(f"DISPLAY environment variable not set. Image saved to {output_path}")

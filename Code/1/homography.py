@@ -1,135 +1,164 @@
-import cv2
 import numpy as np
+import cv2
+import os
 
 def cad_to_plane_coords(points_cad, eps_parallel=1e-4):
     P0, P1, P2, P3 = np.asarray(points_cad, dtype=float)
-
-    # 1. Axis X  (plate direction)
+    
+    # Asse X lungo la targa
     vec_x = P1 - P0
-    x1 = float(np.linalg.norm(vec_x))  # width of the plate (metres)
-    if x1 == 0: # Corrected from if x1 < 1e-9 for clarity, though 1e-9 is safer for float comparisons
-        raise ValueError("P0 and P1 must be distinct.")
-    u = vec_x / x1                     # unit vector along X
-
-    # 2. Projections of the light points onto X to get x2, x3
+    x1 = float(np.linalg.norm(vec_x))
+    u = vec_x / x1
+    
+    # Proiezioni
     x2 = float(np.dot(P2 - P0, u))
     x3 = float(np.dot(P3 - P0, u))
-
-    # 3. Residual vectors orthogonal to u –> distance between the two lines
+    
+    # Vettori ortogonali
     w2 = (P2 - P0) - x2 * u
     w3 = (P3 - P0) - x3 * u
-    y2_abs = np.linalg.norm(w2) # Renamed from y2 to y2_abs for clarity
-    y3_abs = np.linalg.norm(w3) # Renamed from y3 to y3_abs for clarity
-
-    print(f"y2_abs = {y2_abs:.4f} m, y3_abs = {y3_abs:.4f} m") # Corrected print f-string
-
-    if abs(y2_abs - y3_abs) > eps_parallel: # Used y2_abs, y3_abs
-        # Consider making this a warning instead of an error, or making eps_parallel an argument
-        # raise ValueError( # Or print a warning
-        print(
-            f"Warning: Light points might not be on a line parallel to the plate within "
-            f"±{eps_parallel} m (|y2_abs - y3_abs| = {abs(y2_abs - y3_abs):.4f}). Using average."
-        )
-
-    n = np.cross(u, w2)  # normal vector of the plane
-    n = n / np.linalg.norm(n)  # unit normal vector
-
-    # 1) compute the magnitude of the offset (always ≥0)
-    y_mag = 0.5 * (y2_abs + y3_abs)
-
-    # 2) compute sign_y  (as in the corrected version)
-    #    n is any vector normal to the CAD plane,
-    #    for instance n = np.cross(u, P3-P0) normalized.
-    n = _normalize(np.cross(u, (P3 - P0)))
-    sign_y = np.sign(np.dot(np.cross(u, w2), n))
-    if sign_y == 0:
-        sign_y = 1.0
-
-    # 3) form the signed coordinate
-    y_common = sign_y * y_mag
-
-    # 4. Assemble 2‑D coordinates (for findHomography)
-    # findHomography expects (N, 2) or (N, 1, 2) of float32 typically
-    plane_coords_2d = np.array([
-        [0.0, 0.0],          # P0
-        [x1, 0.0],           # P1
-        [x2, y_common],      # P2 (using y_common instead of y)
-        [x3, y_common],      # P3 (using y_common instead of y)
-    ], dtype=np.float32) # Changed to float32 and (N,2) output
-
-    # The original code returned homogeneous coordinates.
-    # If you want to stick to the professor's (0,0), (x1,0), (x2,y), (x3,y) for H input,
-    # this (N,2) format is what cv2.findHomography takes for srcPoints.
-    # If you need homogeneous (N,3) for other reasons, you can hstack a column of ones later.
-    # For now, returning (N,2) is more direct for findHomography.
     
-    # If the task was to return the homogeneous points as per the original code:
-    # plane_hom = np.array([
-    #     [0.0, 0.0, 1.0],
-    #     [x1, 0.0, 1.0],
-    #     [x2, y_common, 1.0], # using y_common
-    #     [x3, y_common, 1.0], # using y_common
-    # ])
-    # return plane_hom
+    # Verifica parallelismo
+    y2_abs = np.linalg.norm(w2)
+    y3_abs = np.linalg.norm(w3)
+    
+    if abs(y2_abs - y3_abs) > eps_parallel:
+        print(f"Warning: Non-parallel lights (diff={abs(y2_abs - y3_abs):.4f})")
+    
+    # Media delle distanze
+    y_mag = 0.5 * (y2_abs + y3_abs)
+    
+    # Calcolo robusto del segno
+    # Assumiamo che i punti luce siano "sopra" la targa nel senso del veicolo
+    # Usiamo il punto medio tra P2 e P3
+    mid_lights = 0.5 * (P2 + P3)
+    mid_plate = 0.5 * (P0 + P1)
+    
+    # Vettore dalla targa ai fari
+    plate_to_lights = mid_lights - mid_plate
+    
+    # Normale al piano (usando tutti e 4 i punti per robustezza)
+    v1 = P1 - P0
+    v2 = 0.5 * (P2 + P3) - P0
+    n = np.cross(v1, v2)
+    n = n / np.linalg.norm(n)
+    
+    # Il segno è positivo se w2 punta nella stessa "direzione" di plate_to_lights
+    # rispetto al piano
+    if y_mag > 0:
+        w_avg = 0.5 * (w2 + w3)
+        sign_y = 1.0 if np.dot(w_avg, plate_to_lights) > 0 else -1.0
+    else:
+        sign_y = 1.0
+    
+    y_common = sign_y * y_mag
+    
+    # Output
+    plane_coords_2d = np.array([
+        [0.0, 0.0],
+        [x1, 0.0],
+        [x2, y_common],
+        [x3, y_common],
+    ], dtype=np.float32)
+    
+    print(f"Plane coordinates:")
+    print(f"  P0: (0, 0)")
+    print(f"  P1: ({x1:.3f}, 0)")
+    print(f"  P2: ({x2:.3f}, {y_common:.3f})")
+    print(f"  P3: ({x3:.3f}, {y_common:.3f})")
+    
     return plane_coords_2d
 
-def calculate_homography(plane_coords_2d, image_coords_2d):
-    H, mask = cv2.findHomography(plane_coords_2d, image_coords_2d, cv2.RANSAC, ransacReprojThreshold=5.0)
-    # H, mask = cv2.findHomography(plane_coords_2d, image_coords_2d, 0) # Per DLT semplice
-
-    if H is None:
-        print("Error: Homography calculation failed.")
+def calculate_homography(plane_coords_2d, image_coords_2d, method='DLT'):
+    # Verifica input
+    assert plane_coords_2d.shape == (4, 2), "Servono esattamente 4 punti piano"
+    assert image_coords_2d.shape == (4, 2), "Servono esattamente 4 punti immagine"
     
-    return H, mask
+    # Calcola omografia
+    if method == 'DLT':
+        # Con 4 punti usa il metodo diretto (più stabile)
+        H, _ = cv2.findHomography(plane_coords_2d, image_coords_2d, method=0)
+    else:
+        # RANSAC ha senso solo con più punti
+        H, mask = cv2.findHomography(plane_coords_2d, image_coords_2d, cv2.RANSAC, ransacReprojThreshold=5.0)
+    
+    if H is None:
+        raise ValueError("Calcolo omografia fallito. Controlla i punti di input.")
+    
+    # Calcola metriche di qualità
+    quality_metrics = validate_homography(H, plane_coords_2d, image_coords_2d)
+    
+    return H, quality_metrics
 
-def _normalize(v: np.ndarray) -> np.ndarray:
-    """Return v/‖v‖ with shape preserved."""
+def validate_homography(H, plane_pts, img_pts):
+    metrics = {}
+    
+    # 1. Determinante (non deve essere vicino a 0)
+    det = np.linalg.det(H)
+    metrics['determinant'] = det
+    if abs(det) < 1e-10:
+        print("WARNING: Determinante quasi zero!")
+    
+    # 2. Numero di condizione (misura stabilità numerica)
+    cond = np.linalg.cond(H)
+    metrics['condition_number'] = cond
+    if cond > 1e6:
+        print(f"WARNING: Numero di condizione alto: {cond:.2e}")
+    
+    # 3. Errore di reproiezione
+    pts_h = np.hstack([plane_pts, np.ones((len(plane_pts), 1))])
+    pts_reproj_h = (H @ pts_h.T).T
+    pts_reproj = pts_reproj_h[:, :2] / pts_reproj_h[:, 2:3]
+    
+    errors = np.linalg.norm(pts_reproj - img_pts, axis=1)
+    metrics['reprojection_errors'] = errors
+    metrics['mean_error'] = np.mean(errors)
+    metrics['max_error'] = np.max(errors)
+    
+    print(f"\nQualità omografia:")
+    print(f"  Determinante: {det:.4f}")
+    print(f"  Condition number: {cond:.2e}")
+    print(f"  Errore medio reproiezione: {metrics['mean_error']:.2f} pixel")
+    print(f"  Errore max reproiezione: {metrics['max_error']:.2f} pixel")
+    
+    return metrics
+
+def _normalize(v):
     n = np.linalg.norm(v)
     if n == 0:
         raise ValueError("zero vector cannot be normalised")
     return v / n
 
-def _homog(p: np.ndarray) -> np.ndarray:
-    """Append 1 to a 2‑D pixel point to build a 3‑D homogeneous vector."""
+def _homog(p):
     return np.array([p[0], p[1], 1.0], dtype=float)
 
-def _cross(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Shortcut for np.cross with float64 output."""
+def _cross(a, b):
     return np.cross(a, b)
 
-def estimate_scale_factor(K, H, p_img, plate_width):
-    """Compute scale factor via professor's triangulation method."""
-    # ---- sanity checks -----------------------------------------------------
-    if p_img.shape != (4, 2):
-        raise ValueError("p_img must be shape (4,2) – order: P0, P1, P2, P3")
+def estimate_scale_factor(K, H, p_frame, plate_width):
+    """Compute scale factor triangulation method."""
+    if p_frame.shape != (4, 2):
+        raise ValueError("p_frame must be shape (4,2) - order: P0, P1, P2, P3")
     if K.shape != (3, 3):
-        raise ValueError("K must be 3×3")
+        raise ValueError("K must be 3x3")
 
-    # ----------------------------------------------------------------------
-    # Step 0 · Prepare frequently used matrices / functions
-    # ----------------------------------------------------------------------
     K_inv = np.linalg.inv(K)
 
-    # Build homogeneous rays   r_i = K⁻¹ p̃_i  (unnormalised)
-    rays = [_normalize(K_inv @ _homog(p)) for p in p_img[:2]]  # only P0, P1
+    # Build homogeneous rays
+    rays = [_normalize(K_inv @ _homog(p)) for p in p_frame[:2]] # only P0, P1
     ray0, ray1 = rays
 
-    # ----------------------------------------------------------------------
-    # Step 1 · Vanishing point of the two parallel segments (targa & fari)
-    # ----------------------------------------------------------------------
-    #   line = p_i × p_j  (in homogeneous image coords)
-    l_plate = _cross(_homog(p_img[0]), _homog(p_img[1]))  # P0 × P1
-    l_lights = _cross(_homog(p_img[2]), _homog(p_img[3]))  # P2 × P3
-    V = _cross(l_plate, l_lights)  # homogeneous vanishing point
+    # Vanishing point of the two parallel segments (targa & fari)
+    l_plate = _cross(_homog(p_frame[0]), _homog(p_frame[1])) # P0 × P1
+    l_lights = _cross(_homog(p_frame[2]), _homog(p_frame[3])) # P2 × P3
+    V = _cross(l_plate, l_lights) # homogeneous vanishing point
     if np.allclose(V, 0):
-        raise RuntimeError("Vanishing point at infinity or numerical issue – "
-                           "input points may not represent parallel segments")
-    d_vp_cam = _normalize(K_inv @ V)  # 3‑D direction of the common line
+        raise RuntimeError("Vanishing point at infinity or numerical issue - input points may not represent parallel segments")
+    d_vp_cam = _normalize(K_inv @ V) # 3‑D direction of the common line
 
-    # ----------------------------------------------------------------------
-    # Step 2 · Angles needed for the law of sines triangulation
-    # ----------------------------------------------------------------------
-    # ∠O  (between the two viewing rays)
+    print("d_vp_cam: ", d_vp_cam)
+
+    # Angles needed for the law of sines triangulation
     cos_O = np.clip(ray0 @ ray1, -1.0, 1.0)
     alpha_O = np.arccos(cos_O)
 
@@ -139,74 +168,187 @@ def estimate_scale_factor(K, H, p_img, plate_width):
     cos_P1 = np.clip((-ray1) @ d_vp_cam, -1.0, 1.0)
     alpha_P1 = np.arccos(cos_P1)
 
-    # ----------------------------------------------------------------------
-    # Step 3 · Depths via law of sines
-    # ----------------------------------------------------------------------
-    # depth_P0 / sin(alpha_P1) = plate_width / sin(alpha_O)
+    # Depths via law of sines
     depth_P0 = plate_width * np.sin(alpha_P1) / np.sin(alpha_O)
     depth_P1 = plate_width * np.sin(alpha_P0) / np.sin(alpha_O)
 
     # Triangulated 3‑D coordinates in camera frame
-    P0_cam = depth_P0 * ray0  # since ray0 is unit‑norm.
+    P0_cam = depth_P0 * ray0 # since ray0 is unit‑norm.
     P1_cam = depth_P1 * ray1
 
-    # ----------------------------------------------------------------------
-    # Step 4 · Unscaled pose from inv(K)H  → extract o_pi_unscaled
-    # ----------------------------------------------------------------------
+    # Unscaled pose from inv(K)H  → extract o_pi_unscaled
     H_tilde = K_inv @ H
-    o_pi_unscaled = H_tilde[:, 2]  # third column (no scaling applied yet)
+    o_pi_unscaled = H_tilde[:, 2] # third column (no scaling applied yet)
 
     # Ensure direction consistency (dot product > 0) to avoid negative scale
     sign = 1.0 if (P0_cam @ o_pi_unscaled) > 0 else -1.0
+
+    if sign < 0:
+        print("INFO: Applicato segno negativo (flip necessario)")
 
     # Scale factor such that scale * o_pi_unscaled  ≈  P0_cam
     scale = sign * (np.linalg.norm(P0_cam) / np.linalg.norm(o_pi_unscaled))
 
     return scale, P0_cam, P1_cam
 
-def draw_rear_bounding_box(image: np.ndarray, 
-                           K_matrix: np.ndarray, 
-                           r1_vec: np.ndarray, 
-                           r2_vec: np.ndarray, 
-                           o_pi_vec: np.ndarray,
-                           width_bb: float,    # Larghezza della BB (es. W_targa)
-                           height_bb: float,   # Altezza della BB (es. y_common dei fari)
-                           depth_bb: float,    # Profondità della BB (es. 0.05 per 5cm, o 0 per superficie)
-                           color: tuple = (0, 255, 0), # Verde BGR
-                           thickness: int = 2) -> np.ndarray:
-    """
-    Disegna una bounding box 3D sul retro del veicolo sull'immagine.
-
-    Args:
-        image: L'immagine su cui disegnare (copia modificata verrà restituita).
-        K_matrix: Matrice di calibrazione intrinseca 3x3.
-        r1_vec: Vettore base r1 (scalato) nel sistema camera, definisce l'asse X del piano mondo.
-        r2_vec: Vettore base r2 (scalato) nel sistema camera, definisce l'asse Y del piano mondo.
-        o_pi_vec: Origine o_pi (scalata) del piano mondo nel sistema camera.
-        width_bb: Larghezza desiderata della bounding box lungo la direzione r1.
-        height_bb: Altezza desiderata della bounding box lungo la direzione r2.
-        depth_bb: Profondità desiderata della bounding box lungo la normale al piano (r1,r2).
-        color: Colore BGR per le linee.
-        thickness: Spessore delle linee.
-
-    Returns:
-        Immagine con la bounding box disegnata.
-    """
-    img_with_bb = image.copy()
-
-    # 1. Definire gli assi della Bounding Box nel sistema camera
-    # r1_vec e r2_vec definiscono le direzioni e le scale per le unità X e Y del piano mondo.
-    # L'asse Z della BB sarà perpendicolare al piano definito da r1 e r2.
+def orthogonalize_rotation_preserving_r1(r1, r2):
+    """Ortogonalizza preservando la direzione di r1."""
     
-    # Vettore per la larghezza (lungo r1)
-    # La lunghezza di r1_vec è la scala per "1 unità X del piano mondo".
-    # Quindi, se width_bb è in quelle stesse unità (es. W_targa), moltiplichiamo per width_bb.
-    # Se r1_vec è già il vettore che va da (0,0) a (width_bb,0) allora non serve moltiplicare.
-    # Dalla definizione [r1 r2 o_pi] = inv(K)H, r1 è l'immagine di (1,0,1) del piano mondo - o_pi.
-    # Quindi P_cam = Xw*r1 + Yw*r2 + o_pi.
-    # Se P_targa_dx_plane = (width_bb, 0), allora P_targa_dx_cam = width_bb * r1_vec + o_pi_vec.
-    # Il vettore che definisce la larghezza è width_bb * r1_vec.
+    # Normalizza r1 (preserva la direzione della targa)
+    r1_norm = r1 / np.linalg.norm(r1)
     
+    # Calcola r3 perpendicolare al piano
+    r3_temp = np.cross(r1, r2)
+    r3_norm = r3_temp / np.linalg.norm(r3_temp)
+    
+    # Ricalcola r2 per garantire ortogonalità
+    r2_norm = np.cross(r3_norm, r1_norm)
+    
+    # Costruisci R ortogonale
+    R = np.column_stack((r1_norm, r2_norm, r3_norm))
+    
+    # Verifica che sia una rotazione propria (det = +1)
+    if np.linalg.det(R) < 0:
+        R[:, 2] = -R[:, 2]  # Inverti r3 se necessario
+    
+    return R
+
+def verify_scales_and_project(r1_scaled, r2_scaled, o_pi_scaled):
+    # Calcola le scale
+    scale_r1 = np.linalg.norm(r1_scaled)
+    scale_r2 = np.linalg.norm(r2_scaled)
+    
+    print(f"\nScale dei vettori base:")
+    print(f"  |r1_scaled| = {scale_r1:.4f}")
+    print(f"  |r2_scaled| = {scale_r2:.4f}")
+    print(f"  Rapporto = {scale_r1/scale_r2:.4f}")
+    
+    # Verifica che siano simili (dovrebbero esserlo per una camera calibrata)
+    if abs(scale_r1/scale_r2 - 1.0) > 0.1:  # > 10% differenza
+        print("WARNING: Scale molto diverse, possibile problema!")
+
+def draw_vehicle_bounding_box(image, K, R_normalized, origin_cam, scale_r1, scale_r2, color=(0, 255, 0), thickness=2):
+    # Estrai i vettori base normalizzati
+    r1_n, r2_n, r3_n = R_normalized[:, 0], R_normalized[:, 1], R_normalized[:, 2]
+    
+   
+    # Definisci gli 8 vertici della bounding box nel sistema veicolo
+    # Sistema coordinate: origine = angolo sup sx targa
+    # X: larghezza veicolo (destra), Y: altezza (su), Z: lunghezza (avanti)
+    vertices_vehicle = {
+        # Faccia posteriore (vicino alla targa)
+        'RBL': np.array([-0.606, -0.9, 0.3],),
+        'RBR': np.array([-0.606+CAR_W, -0.9, 0.3]),
+        'RTL': np.array([-0.606, 1.467-0.9, 0.3]),
+        'RTR': np.array([-0.606+CAR_W, CAR_H-0.9, 0.3]),
+        
+        # Faccia anteriore
+        'FBL': np.array([-0.606, -0.9, -CAR_D+0.3]),
+        'FBR': np.array([-0.606+1.958, -0.9, -CAR_D+0.3]),
+        'FTL': np.array([-0.606, 1.467-0.9, -CAR_D+0.3]),
+        'FTR': np.array([-0.606+CAR_W, 1.467-0.9, -CAR_D+0.3])
+    }
+    
+    # Trasforma i vertici nel sistema camera
+    vertices_cam = {}
+    for name, v_vehicle in vertices_vehicle.items():
+        # Applica scale e rotazione, poi trasla
+        v_cam = origin_cam + (scale_r1 * v_vehicle[0] * r1_n + 
+                             scale_r2 * v_vehicle[1] * r2_n + 
+                             scale_r1 * v_vehicle[2] * r3_n)  # Usa scale_r1 per Z
+        vertices_cam[name] = v_cam
+    
+    # Proietta i vertici nell'immagine
+    vertices_2d = {}
+    h_img, w_img = image.shape[:2]
+    
+    for name, v_cam in vertices_cam.items():
+        # Proiezione prospettica
+        p_hom = K @ v_cam
+        
+        if p_hom[2] <= 1e-6:  # Dietro la camera
+            vertices_2d[name] = None
+            print(f"Vertice {name} dietro la camera")
+            continue
+            
+        # De-omogeneizzazione
+        u = int(p_hom[0] / p_hom[2])
+        v = int(p_hom[1] / p_hom[2])
+        vertices_2d[name] = (u, v)
+    
+    # Copia l'immagine per disegnare
+    img_result = image.copy()
+    
+    # Definisci gli spigoli da disegnare
+    edges = [
+        # Faccia posteriore
+        ('RBL', 'RBR'), ('RBR', 'RTR'), ('RTR', 'RTL'), ('RTL', 'RBL'),
+        # Faccia anteriore
+        ('FBL', 'FBR'), ('FBR', 'FTR'), ('FTR', 'FTL'), ('FTL', 'FBL'),
+        # Spigoli laterali
+        ('RBL', 'FBL'), ('RBR', 'FBR'), ('RTL', 'FTL'), ('RTR', 'FTR')
+    ]
+    
+    # Disegna gli spigoli
+    for v1_name, v2_name in edges:
+        v1 = vertices_2d.get(v1_name)
+        v2 = vertices_2d.get(v2_name)
+        
+        if v1 is None or v2 is None:
+            continue
+            
+        # Usa clipLine per gestire linee che escono dall'immagine
+        clipped = cv2.clipLine((0, 0, w_img, h_img), v1, v2)
+        if clipped[0]:
+            cv2.line(img_result, clipped[1], clipped[2], color, thickness)
+    
+    # Disegna i vertici principali con colori diversi per orientamento
+    vertex_colors = {
+        'RBL': ((255, 0, 0), 'RBL'),    # Blu - Rear Bottom Left
+        'RBR': ((0, 255, 0), 'RBR'),    # Verde - Rear Bottom Right  
+        'FBL': ((0, 0, 255), 'FBL'),    # Rosso - Front Bottom Left
+        'FBR': ((255, 255, 0), 'FBR')   # Giallo - Front Bottom Right
+    }
+    
+    for vertex_name, (vertex_color, label) in vertex_colors.items():
+        pt = vertices_2d.get(vertex_name)
+        if pt is not None and 0 <= pt[0] < w_img and 0 <= pt[1] < h_img:
+            cv2.circle(img_result, pt, 6, vertex_color, -1)
+            cv2.putText(img_result, label, (pt[0] + 10, pt[1] - 10),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, vertex_color, 2)
+    
+    # Opzionale: disegna gli assi coordinati
+    origin = vertices_2d.get('RBL')
+    if origin is not None:
+        # Asse X (rosso)
+        x_end = vertices_2d.get('RBR')
+        if x_end is not None and all(p is not None for p in [origin, x_end]):
+            cv2.arrowedLine(img_result, origin, 
+                          (origin[0] + (x_end[0] - origin[0])//3, 
+                           origin[1] + (x_end[1] - origin[1])//3),
+                          (0, 0, 255), 3, tipLength=0.2)
+            
+        # Asse Y (verde)
+        y_end = vertices_2d.get('RTL')
+        if y_end is not None and all(p is not None for p in [origin, y_end]):
+            cv2.arrowedLine(img_result, origin,
+                          (origin[0] + (y_end[0] - origin[0])//3,
+                           origin[1] + (y_end[1] - origin[1])//3),
+                          (0, 255, 0), 3, tipLength=0.2)
+            
+        # Asse Z (blu)
+        z_end = vertices_2d.get('FBL')
+        if z_end is not None and all(p is not None for p in [origin, z_end]):
+            cv2.arrowedLine(img_result, origin,
+                          (origin[0] + (z_end[0] - origin[0])//3,
+                           origin[1] + (z_end[1] - origin[1])//3),
+                          (255, 0, 0), 3, tipLength=0.2)
+    
+    return img_result
+
+def draw_rear_bounding_box(frame, K_matrix, r1_vec, r2_vec, o_pi_vec, width_bb, height_bb, depth_bb, color=(0,255,0), thickness=2):
+    frame_with_bb = frame.copy()
+
     vec_width_cam = width_bb * r1_vec  # Questo assume che r1_vec sia per X_w=1
     vec_height_cam = height_bb * r2_vec # Questo assume che r2_vec sia per Y_w=1
     
@@ -223,7 +365,7 @@ def draw_rear_bounding_box(image: np.ndarray,
            np.allclose(r2_vec / np.linalg.norm(r2_vec), [0,1,0]):
             normal_vec_cam = np.array([0,0,1.0])
         else: # Non si può fare molto altro senza più informazioni
-            return img_with_bb # Restituisce immagine originale
+            return frame_with_bb # Restituisce immagine originale
 
     normal_vec_cam = normal_vec_cam / np.linalg.norm(normal_vec_cam) # Rendi unitario
     vec_depth_cam = depth_bb * normal_vec_cam # Vettore per la profondità
@@ -264,7 +406,7 @@ def draw_rear_bounding_box(image: np.ndarray,
             # Per semplicità, se un punto è dietro, potremmo non disegnare l'intera BB
             # o sostituire il punto con None e gestire il disegno di conseguenza.
             # Qui, se un punto è problematico, non disegniamo la BB.
-            # return img_with_bb # Opzione drastica
+            # return frame_with_bb # Opzione drastica
             vertices_2d_image.append(None) # Segna come non valido
             continue
 
@@ -273,7 +415,7 @@ def draw_rear_bounding_box(image: np.ndarray,
         vertices_2d_image.append((u, v))
     
     # if not valid_projection and not any(pt is None for pt in vertices_2d_image):
-        # return img_with_bb # Se abbiamo deciso di non disegnare se un punto è dietro
+        # return frame_with_bb # Se abbiamo deciso di non disegnare se un punto è dietro
 
     # 4. Disegnare le Areste della Bounding Box sull'Immagine
     # Definisci le connessioni tra i vertici (indici 0-7)
@@ -290,47 +432,16 @@ def draw_rear_bounding_box(image: np.ndarray,
         # Disegna la linea solo se entrambi i punti sono validi (proiettati correttamente)
         if pt1 is not None and pt2 is not None:
             # Verifica se i punti sono all'interno dei limiti dell'immagine (opzionale ma buona pratica)
-            h_img, w_img = img_with_bb.shape[:2]
-            if (0 <= pt1[0] < w_img and 0 <= pt1[1] < h_img and 0 <= pt2[0] < w_img and 0 <= pt2[1] < h_img):
-                cv2.line(img_with_bb, pt1, pt2, color, thickness)
+            h_frame, w_frame = frame_with_bb.shape[:2]
+            if (0 <= pt1[0] < w_frame and 0 <= pt1[1] < h_frame and 0 <= pt2[0] < w_frame and 0 <= pt2[1] < h_frame):
+                cv2.line(frame_with_bb, pt1, pt2, color, thickness)
             else:
                 # Puoi usare cv2.clipLine per disegnare solo la parte visibile
-                clipped = cv2.clipLine((0, 0, w_img, h_img), pt1, pt2)
+                clipped = cv2.clipLine((0, 0, w_frame, h_frame), pt1, pt2)
                 if clipped[0]:
-                    cv2.line(img_with_bb, clipped[1], clipped[2], color, thickness)
+                    cv2.line(frame_with_bb, clipped[1], clipped[2], color, thickness)
 
-
-    return img_with_bb
-
-def verification(K, r1, r2, o_pi, P0_tri, P1_tri, img):
-    # check if o_pi_scaled and P0_tri are similar
-    print("\n--- Verification 1: o_pi_scaled vs P0_tri ---")
-    diff_o_pi_vs_P0_tri = np.linalg.norm(o_pi_scaled - P0_tri)
-    print(f"o_pi_scaled: {o_pi_scaled}")
-    print(f"P0_tri:      {P0_tri}")
-    print(f"Euclidean distance between o_pi_scaled and P0_tri: {diff_o_pi_vs_P0_tri:.6e} meters")
-    if diff_o_pi_vs_P0_tri < 1e-3: # Threshold for "close enough", e.g., 1mm
-        print("SUCCESS: o_pi_scaled is very close to P0_tri.")
-    else:
-        print("WARNING: o_pi_scaled differs significantly from P0_tri.")
-    
-    # --- Verification Step 2: Compare (o_pi_scaled + PLATE_W * r1_scaled) with P1_tri ---
-    print("\n--- Verification 2: Reconstructed P1 vs P1_tri ---")
-    # P1_plane in world coordinates was (PLATE_W, 0)
-    # So, its 3D position in camera coordinates using the scaled pose parameters is:
-    # P1_reconstructed_from_H = o_pi_scaled + Xw * r1_scaled + Yw * r2_scaled
-    # Since Yw = 0 for P1_plane:
-    P1_reconstructed_from_H = o_pi_scaled + PLATE_W * r1_scaled
-    
-    diff_P1_reconstructed_vs_P1_tri = np.linalg.norm(P1_reconstructed_from_H - P1_tri)
-    print(f"P1_reconstructed_from_H (o_pi_s + PLATE_W*r1_s): {P1_reconstructed_from_H}")
-    print(f"P1_tri:                                       {P1_tri}")
-    print(f"Euclidean distance between P1_reconstructed_from_H and P1_tri: {diff_P1_reconstructed_vs_P1_tri:.6e} meters")
-
-    if diff_P1_reconstructed_vs_P1_tri < 1e-3: # Threshold, e.g., 1mm
-        print("SUCCESS: P1 reconstructed from H components is very close to P1_tri.")
-    else:
-        print("WARNING: P1 reconstructed from H components differs significantly from P1_tri.")
+    return frame_with_bb
 
 K = np.array([
     [3.2014989e3, 0.0, 1.93982925e3],
@@ -343,31 +454,30 @@ dist = np.array([[2.4377e-01, -1.5955e+00, -1.1528e-03, 4.1986e-04, 3.5668e+00]]
 PLATE_W = 0.520
 PLATE_H = 0.130
 Z_FARO = 0.150
-CAR_H = 1.467
-CAR_L = 3.997
 CAR_W = 1.732
+CAR_H = 1.467
+CAR_D = 3.997
 
 if __name__ == "__main__":
-    # ---------- 0. immagine e intrinseche ---------------------------------
-    img = cv2.imread("sunny/frame_02.png")
-    if img is None:
+    frame = cv2.imread(os.path.join(os.getcwd(), "Code", "1", "sunnyFrame.png"))
+    if frame is None:
         raise FileNotFoundError("frame non trovato")
     
-    # img_ud = cv2.undistort(img, K, dist)
-    img_ud = img.copy()  # For testing without undistortion
+    print("Frame shape:", frame.shape)
+    
+    frame_ud = cv2.undistort(frame, K, dist)
 
-    # Minimal example with synthetic data (plate 1 m wide, lights 0.3 m above)
-    TTL = np.array([0.0, 0.0, 0.0])
-    TTR = np.array([PLATE_W, 0.0, 0.0])
-    FL = np.array([-0.340, 0.100, 0.0])
-    FR = np.array([PLATE_W + 0.340, 0.100, 0.0])
+    TTL = np.array([0.0, 0.0, 0.0]) # Target Top Left
+    TTR = np.array([PLATE_W, 0.0, 0.0]) # Target Top Right
+    LL = np.array([-0.340, 0.100, 0.0]) # Light Left
+    LR = np.array([PLATE_W + 0.340, 0.100, 0.0]) # Light Right
 
-    plane_pts = cad_to_plane_coords([TTL, TTR, FL, FR])
+    plane_pts = cad_to_plane_coords([TTL, TTR, LL, LR])
     print("Plane coordinates (homogeneous):\n", plane_pts)
 
-    # ---------- 1. pixel (undistorti) dei 4 punti sullo stesso piano ------
+    # punti hardcoded
     pix = np.array([
-        [1020, 1804], # P0 = plate TL  (origine)
+        [1020, 1804], # P0 = plate TL
         [1324, 1780], # P1 = plate TR
         [792, 1768], # P2 = rear-light L
         [1484, 1708] # P3 = rear-light R
@@ -375,11 +485,7 @@ if __name__ == "__main__":
 
     pix = cv2.undistortPoints(pix.reshape(-1,1,2), K, dist, P=K).reshape(-1,2)
 
-    # display the points
-    for p in pix:
-        cv2.circle(img_ud, (int(p[0]), int(p[1])), 8, (0, 255, 0), 10)
-    
-    # 4. Calcola l'omografia H
+    # calcola l'omografia H
     H, mask = calculate_homography(plane_pts, pix)
 
     if H is not None:
@@ -409,58 +515,53 @@ if __name__ == "__main__":
     print("r2_scaled:\n", r2_scaled)
     print("o_pi_scaled (t_scaled):\n", o_pi_scaled)
 
-    r3_vec = np.cross(r1_scaled, r2_scaled)
-    r3_vec /= np.linalg.norm(r3_vec)
+    R = orthogonalize_rotation_preserving_r1(r1_scaled, r2_scaled)
+    print("\nMatrice di rotazione R (ortogonalizzata):\n", R)
+    r1_n, r2_n, r3_n = R[:,0], R[:,1], R[:,2]
 
-    wheel_offset = np.array([-0.606+0.386, 1.467-0.9, 0.3]) # TOP LEFT
-    wheel_offset = np.array([-0.606, -0.9, 0.3]) # BOTTOM LEFT    w
-    wheel_offset = np.array([-0.606+CAR_W, -0.9, 0.3]) # BOTTOM Xright    
-    # wheel_offset = np.array([0.52, 0, 0])   # (Xw, Yw, Zw) in metri
-    # wheel_offset = np.array([-0.606, -0.9, -CAR_L-0.3])   # (Xw, Yw, Zw) in metri
+    # SOLUZIONE: mantieni la scala originale
+    scale_r1 = np.linalg.norm(r1_scaled)
+    scale_r2 = np.linalg.norm(r2_scaled)
+
+    # R = np.column_stack((r1_scaled, r2_scaled, np.cross(r1_scaled, r2_scaled)))
+    # U, _, Vt = np.linalg.svd(R)
+    # R = U @ Vt
+    # r1_n, r2_n, r3_n = R[:,0], R[:,1], R[:,2]
+
+    """
+    # wheel_offset = np.array([-0.606+0.386, 1.467-0.9, 0.3]) # front-TL
+    # wheel_offset = np.array([-0.606, -0.9, 0.3]) # WBL
+    # wheel_offset = np.array([-0.606+CAR_W, -0.9, 0.3]) # WBR
+    # wheel_offset = np.array([0.52, 0, 0]) # TTR
+    # wheel_offset = np.array([-0.606, -0.9, +CAR_D-0.3]) # WTL
     P_wheel_cam = (o_pi_scaled +
-                wheel_offset[0] * r1_scaled +
-                wheel_offset[1] * r2_scaled +
-                wheel_offset[2] * r3_vec)
-    p_hom = K @ P_wheel_cam        # (3,)
+                   wheel_offset[0] * scale_r1 * r1_n +
+                   wheel_offset[1] * scale_r2 * r2_n +
+                   wheel_offset[2] * scale_r1 * r3_n)
+
+    # proiezione in pixel:
+    p_hom = K @ P_wheel_cam
+    if p_hom[2] <= 1e-6:
+        raise ValueError("Il punto è dietro il piano immagine")
+
     u = p_hom[0] / p_hom[2]
     v = p_hom[1] / p_hom[2]
-    print(f"Ruota anteriore sinistra in pixel: u={u:.1f}, v={v:.1f}")
+    print(f"Punto proiettato: (u,v) = ({u:.1f}, {v:.1f})")
+    h_frame, w_frame = frame_ud.shape[:2]
+    if 0 <= u < w_frame and 0 <= v < h_frame:
+        cv2.circle(frame_ud, (int(round(u)), int(round(v))), 8, (0,0,255), -1)
+    else:
+        print("La proiezione cade fuori immagine")
+    """
 
-    cv2.circle(img_ud, (int(u), int(v)), 8, (0, 0, 255), 10)  # r
+    verify_scales_and_project(r1_scaled, r2_scaled, o_pi_scaled)
 
-    verification(K, r1_scaled, r2_scaled, o_pi_scaled, P0_tri, P1_tri, img_ud)
+    frame_with_bb = draw_vehicle_bounding_box(frame_ud, K, R, o_pi_scaled, scale_r1, scale_r2, color=(0, 255, 0), thickness=3)
 
-    bb = draw_rear_bounding_box(
-        img_ud, K, r1_scaled, r2_scaled, o_pi_scaled,
-        width_bb=-1.5, height_bb=-1, depth_bb=-1.5,
-        color=(0, 255, 0), thickness=5
-    )
-
-    # bb1 = draw_rear_bounding_box(
-    #     bb, K, r1_scaled, r2_scaled, o_pi_scaled,
-    #     width_bb=1, height_bb=0.75, depth_bb=1,
-    #     color=(255, 255, 0), thickness=5
-    # )
-
-    # rescale l'immagine per visualizzarla correttamente
-    # scale_factor = 0.35  # Riduci la dimensione dell'immagine per la visualizzazione
-    # new_width = int(bb.shape[1] * scale_factor)
-    # new_height = int(bb.shape[0] * scale_factor)
-    # bb = cv2.resize(bb, (new_width, new_height))
-    # cv2.imshow("Bounding Box", bb)
-
-    scale_factor = 0.35  # Riduci la dimensione dell'immagine per la visualizzazione
-    new_width = int(img_ud.shape[1] * scale_factor)
-    new_height = int(img_ud.shape[0] * scale_factor)
-    bb = cv2.resize(img_ud, (new_width, new_height))
-    cv2.imshow("Bounding Box", bb)
-    
-    
-    # bb1 = cv2.resize(bb1, (new_width, new_height))
-    # cv2.imshow("Bounding Box with Wheel", bb1)
-
-    # bb_wheel = cv2.resize(bb_wheel, (new_width, new_height))
-    # cv2.imshow("Bounding Box with Wheel", bb_wheel)
-
+    scale_display = 0.35
+    h_display = int(frame_ud.shape[0] * scale_display)
+    w_display = int(frame_ud.shape[1] * scale_display)
+    frame_display = cv2.resize(frame_with_bb, (w_display, h_display))
+    cv2.imshow("Bounding Box", frame_display)
     cv2.waitKey(0)
     cv2.destroyAllWindows()

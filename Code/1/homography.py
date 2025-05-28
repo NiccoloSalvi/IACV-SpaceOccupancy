@@ -230,7 +230,6 @@ def verify_scales_and_project(r1_scaled, r2_scaled, o_pi_scaled):
 def draw_vehicle_bounding_box(image, K, R_normalized, origin_cam, scale_r1, scale_r2, color=(0, 255, 0), thickness=2):
     # Estrai i vettori base normalizzati
     r1_n, r2_n, r3_n = R_normalized[:, 0], R_normalized[:, 1], R_normalized[:, 2]
-    
    
     # Definisci gli 8 vertici della bounding box nel sistema veicolo
     # Sistema coordinate: origine = angolo sup sx targa
@@ -304,18 +303,21 @@ def draw_vehicle_bounding_box(image, K, R_normalized, origin_cam, scale_r1, scal
     
     # Disegna i vertici principali con colori diversi per orientamento
     vertex_colors = {
-        'RBL': ((255, 0, 0), 'RBL'),    # Blu - Rear Bottom Left
-        'RBR': ((0, 255, 0), 'RBR'),    # Verde - Rear Bottom Right  
-        'FBL': ((0, 0, 255), 'FBL'),    # Rosso - Front Bottom Left
-        'FBR': ((255, 255, 0), 'FBR')   # Giallo - Front Bottom Right
+        'RBL': ((255, 0, 0), 'RBL'),
+        'RBR': ((0, 0, 0), 'RBR'),
+        'RTL': ((0, 255, 255), 'RTL'),
+        'RTR': ((255, 0, 255), 'RTR'),
+        'FBL': ((0, 0, 255), 'FBL'),
+        'FBR': ((255, 255, 0), 'FBR'),
+        'FTL': ((255, 128, 0), 'FTL'),
+        'FTR': ((128, 0, 255), 'FTR')
     }
     
     for vertex_name, (vertex_color, label) in vertex_colors.items():
         pt = vertices_2d.get(vertex_name)
         if pt is not None and 0 <= pt[0] < w_img and 0 <= pt[1] < h_img:
             cv2.circle(img_result, pt, 6, vertex_color, -1)
-            cv2.putText(img_result, label, (pt[0] + 10, pt[1] - 10),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, vertex_color, 2)
+            cv2.putText(img_result, label, (pt[0] + 10, pt[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 3, vertex_color, 3)
     
     # Opzionale: disegna gli assi coordinati
     origin = vertices_2d.get('RBL')
@@ -323,125 +325,36 @@ def draw_vehicle_bounding_box(image, K, R_normalized, origin_cam, scale_r1, scal
         # Asse X (rosso)
         x_end = vertices_2d.get('RBR')
         if x_end is not None and all(p is not None for p in [origin, x_end]):
-            cv2.arrowedLine(img_result, origin, 
-                          (origin[0] + (x_end[0] - origin[0])//3, 
-                           origin[1] + (x_end[1] - origin[1])//3),
-                          (0, 0, 255), 3, tipLength=0.2)
+            cv2.arrowedLine(img_result, origin, (origin[0] + (x_end[0] - origin[0])//3, origin[1] + (x_end[1] - origin[1])//3), (0, 0, 255), 3, tipLength=0.2)
             
         # Asse Y (verde)
         y_end = vertices_2d.get('RTL')
         if y_end is not None and all(p is not None for p in [origin, y_end]):
-            cv2.arrowedLine(img_result, origin,
-                          (origin[0] + (y_end[0] - origin[0])//3,
-                           origin[1] + (y_end[1] - origin[1])//3),
-                          (0, 255, 0), 3, tipLength=0.2)
+            cv2.arrowedLine(img_result, origin, (origin[0] + (y_end[0] - origin[0])//3, origin[1] + (y_end[1] - origin[1])//3), (0, 255, 0), 3, tipLength=0.2)
             
         # Asse Z (blu)
         z_end = vertices_2d.get('FBL')
         if z_end is not None and all(p is not None for p in [origin, z_end]):
-            cv2.arrowedLine(img_result, origin,
-                          (origin[0] + (z_end[0] - origin[0])//3,
-                           origin[1] + (z_end[1] - origin[1])//3),
-                          (255, 0, 0), 3, tipLength=0.2)
+            cv2.arrowedLine(img_result, origin, (origin[0] + (z_end[0] - origin[0])//3, origin[1] + (z_end[1] - origin[1])//3), (255, 0, 0), 3, tipLength=0.2)
     
     return img_result
 
-def draw_rear_bounding_box(frame, K_matrix, r1_vec, r2_vec, o_pi_vec, width_bb, height_bb, depth_bb, color=(0,255,0), thickness=2):
-    frame_with_bb = frame.copy()
-
-    vec_width_cam = width_bb * r1_vec  # Questo assume che r1_vec sia per X_w=1
-    vec_height_cam = height_bb * r2_vec # Questo assume che r2_vec sia per Y_w=1
+def visualize_extracted_points(img, points, labels):
+    """Visualizza i punti estratti per verificare la correttezza."""
+    img_vis = img.copy()
     
-    # Calcola la normale al piano per la direzione della profondità
-    # Assicurati che r1_vec e r2_vec non siano collineari
-    normal_vec_cam = np.cross(r1_vec, r2_vec)
-    if np.linalg.norm(normal_vec_cam) < 1e-6:
-        print("Error: r1_vec and r2_vec sono collineari, impossibile definire la normale.")
-        # Potresti usare una direzione di default o propagare l'errore
-        # Per ora, creiamo una normale fittizia se questo accade, ma è un segnale di problemi precedenti.
-        # Se r1 punta lungo X e r2 lungo Y, la normale dovrebbe essere lungo Z.
-        # Tentativo di recupero (non ideale, indica problemi a monte):
-        if np.allclose(r1_vec / np.linalg.norm(r1_vec), [1,0,0]) and \
-           np.allclose(r2_vec / np.linalg.norm(r2_vec), [0,1,0]):
-            normal_vec_cam = np.array([0,0,1.0])
-        else: # Non si può fare molto altro senza più informazioni
-            return frame_with_bb # Restituisce immagine originale
-
-    normal_vec_cam = normal_vec_cam / np.linalg.norm(normal_vec_cam) # Rendi unitario
-    vec_depth_cam = depth_bb * normal_vec_cam # Vettore per la profondità
-
-    # 2. Calcolare gli 8 Vertici della Bounding Box in coordinate camera
-    # L'origine della BB è o_pi_vec (che corrisponde a P0_plane, es. angolo inf sx targa)
-    # Vertici del piano "posteriore" (Z=0 locale della BB)
-    v000 = o_pi_vec
-    v100 = o_pi_vec + vec_width_cam
-    v010 = o_pi_vec + vec_height_cam
-    v110 = o_pi_vec + vec_width_cam + vec_height_cam
+    colors = [(0,0,255), (0,255,0), (255,0,0), (255,255,0)]
     
-    # Vertici del piano "anteriore" (Z=depth_bb locale della BB)
-    # Questi puntano "fuori" dal piano targa/luci se depth_bb > 0 e normal_vec_cam punta fuori
-    v001 = o_pi_vec + vec_depth_cam
-    v101 = o_pi_vec + vec_width_cam + vec_depth_cam
-    v011 = o_pi_vec + vec_height_cam + vec_depth_cam
-    v111 = o_pi_vec + vec_width_cam + vec_height_cam + vec_depth_cam
-
-    vertices_3d_cam = np.array([
-        v000, v100, v010, v110,
-        v001, v101, v011, v111
-    ])
-
-    # 3. Proiettare i Vertici 3D sull'Immagine 2D
-    # K @ P_cam, dove P_cam è (3,N) e K è (3,3)
-    # vertices_3d_cam è (8,3), quindi trasponilo
-    projected_hom = K_matrix @ vertices_3d_cam.T # Risultato (3,8)
+    for i, (pt, label) in enumerate(zip(points, labels)):
+        x, y = int(pt[0]), int(pt[1])
+        cv2.circle(img_vis, (x, y), 10, colors[i], -1)
+        cv2.putText(img_vis, label, (x+15, y-15), cv2.FONT_HERSHEY_SIMPLEX, 0.7, colors[i], 2)
     
-    # De-omogeneizza e gestisci punti dietro la camera
-    vertices_2d_image = []
-    valid_projection = True
-    for i in range(projected_hom.shape[1]):
-        s = projected_hom[2, i]
-        if s <= 1e-3: # Punto dietro o troppo vicino al piano immagine
-            # print(f"Warning: Vertice {i} della BB è dietro o sul piano della camera (s={s}). Non verrà disegnato.")
-            valid_projection = False # O gestisci disegnando solo le parti visibili
-            # Per semplicità, se un punto è dietro, potremmo non disegnare l'intera BB
-            # o sostituire il punto con None e gestire il disegno di conseguenza.
-            # Qui, se un punto è problematico, non disegniamo la BB.
-            # return frame_with_bb # Opzione drastica
-            vertices_2d_image.append(None) # Segna come non valido
-            continue
-
-        u = int(projected_hom[0, i] / s)
-        v = int(projected_hom[1, i] / s)
-        vertices_2d_image.append((u, v))
+    # Disegna le linee di connessione
+    cv2.line(img_vis, tuple(points[0].astype(int)), tuple(points[1].astype(int)), (0,255,0), 2)
+    cv2.line(img_vis, tuple(points[2].astype(int)), tuple(points[3].astype(int)), (0,255,0), 2)
     
-    # if not valid_projection and not any(pt is None for pt in vertices_2d_image):
-        # return frame_with_bb # Se abbiamo deciso di non disegnare se un punto è dietro
-
-    # 4. Disegnare le Areste della Bounding Box sull'Immagine
-    # Definisci le connessioni tra i vertici (indici 0-7)
-    edges = [
-        (0, 1), (1, 3), (3, 2), (2, 0),  # Faccia posteriore
-        (4, 5), (5, 7), (7, 6), (6, 4),  # Faccia anteriore
-        (0, 4), (1, 5), (2, 6), (3, 7)   # Connessioni tra facce
-    ]
-
-    for pt1_idx, pt2_idx in edges:
-        pt1 = vertices_2d_image[pt1_idx]
-        pt2 = vertices_2d_image[pt2_idx]
-        
-        # Disegna la linea solo se entrambi i punti sono validi (proiettati correttamente)
-        if pt1 is not None and pt2 is not None:
-            # Verifica se i punti sono all'interno dei limiti dell'immagine (opzionale ma buona pratica)
-            h_frame, w_frame = frame_with_bb.shape[:2]
-            if (0 <= pt1[0] < w_frame and 0 <= pt1[1] < h_frame and 0 <= pt2[0] < w_frame and 0 <= pt2[1] < h_frame):
-                cv2.line(frame_with_bb, pt1, pt2, color, thickness)
-            else:
-                # Puoi usare cv2.clipLine per disegnare solo la parte visibile
-                clipped = cv2.clipLine((0, 0, w_frame, h_frame), pt1, pt2)
-                if clipped[0]:
-                    cv2.line(frame_with_bb, clipped[1], clipped[2], color, thickness)
-
-    return frame_with_bb
+    return img_vis
 
 K = np.array([
     [3.2014989e3, 0.0, 1.93982925e3],
@@ -519,49 +432,21 @@ if __name__ == "__main__":
     print("\nMatrice di rotazione R (ortogonalizzata):\n", R)
     r1_n, r2_n, r3_n = R[:,0], R[:,1], R[:,2]
 
-    # SOLUZIONE: mantieni la scala originale
     scale_r1 = np.linalg.norm(r1_scaled)
     scale_r2 = np.linalg.norm(r2_scaled)
-
-    # R = np.column_stack((r1_scaled, r2_scaled, np.cross(r1_scaled, r2_scaled)))
-    # U, _, Vt = np.linalg.svd(R)
-    # R = U @ Vt
-    # r1_n, r2_n, r3_n = R[:,0], R[:,1], R[:,2]
-
-    """
-    # wheel_offset = np.array([-0.606+0.386, 1.467-0.9, 0.3]) # front-TL
-    # wheel_offset = np.array([-0.606, -0.9, 0.3]) # WBL
-    # wheel_offset = np.array([-0.606+CAR_W, -0.9, 0.3]) # WBR
-    # wheel_offset = np.array([0.52, 0, 0]) # TTR
-    # wheel_offset = np.array([-0.606, -0.9, +CAR_D-0.3]) # WTL
-    P_wheel_cam = (o_pi_scaled +
-                   wheel_offset[0] * scale_r1 * r1_n +
-                   wheel_offset[1] * scale_r2 * r2_n +
-                   wheel_offset[2] * scale_r1 * r3_n)
-
-    # proiezione in pixel:
-    p_hom = K @ P_wheel_cam
-    if p_hom[2] <= 1e-6:
-        raise ValueError("Il punto è dietro il piano immagine")
-
-    u = p_hom[0] / p_hom[2]
-    v = p_hom[1] / p_hom[2]
-    print(f"Punto proiettato: (u,v) = ({u:.1f}, {v:.1f})")
-    h_frame, w_frame = frame_ud.shape[:2]
-    if 0 <= u < w_frame and 0 <= v < h_frame:
-        cv2.circle(frame_ud, (int(round(u)), int(round(v))), 8, (0,0,255), -1)
-    else:
-        print("La proiezione cade fuori immagine")
-    """
-
     verify_scales_and_project(r1_scaled, r2_scaled, o_pi_scaled)
 
     frame_with_bb = draw_vehicle_bounding_box(frame_ud, K, R, o_pi_scaled, scale_r1, scale_r2, color=(0, 255, 0), thickness=3)
+
+    # Usa questa funzione per verificare i punti
+    labels = ['Targa TL', 'Targa TR', 'Faro L', 'Faro R']
+    frame_with_bb = visualize_extracted_points(frame_with_bb, pix, labels)
 
     scale_display = 0.35
     h_display = int(frame_ud.shape[0] * scale_display)
     w_display = int(frame_ud.shape[1] * scale_display)
     frame_display = cv2.resize(frame_with_bb, (w_display, h_display))
     cv2.imshow("Bounding Box", frame_display)
+
     cv2.waitKey(0)
     cv2.destroyAllWindows()

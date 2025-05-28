@@ -343,12 +343,12 @@ def visualize_extracted_points(img, points, labels):
     """Visualizza i punti estratti per verificare la correttezza."""
     img_vis = img.copy()
     
-    colors = [(0,0,255), (0,255,0), (255,0,0), (255,255,0)]
+    colors = [(0,0,255), (0,0,0), (255,0,0), (255,255,0)]
     
     for i, (pt, label) in enumerate(zip(points, labels)):
         x, y = int(pt[0]), int(pt[1])
         cv2.circle(img_vis, (x, y), 10, colors[i], -1)
-        cv2.putText(img_vis, label, (x+15, y-15), cv2.FONT_HERSHEY_SIMPLEX, 0.7, colors[i], 2)
+        cv2.putText(img_vis, label, (x+15, y-15), cv2.FONT_HERSHEY_SIMPLEX, 1, colors[i], 2)
     
     # Disegna le linee di connessione
     cv2.line(img_vis, tuple(points[0].astype(int)), tuple(points[1].astype(int)), (0,255,0), 2)

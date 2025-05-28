@@ -1,8 +1,9 @@
 import cv2
 import numpy as np
+import os
 
 # ---------- 0. immagine e intrinseche ---------------------------------
-img = cv2.imread("sunny/frame_02.png")
+img = cv2.imread(os.path.join(os.getcwd(), "Code", "1", "sunnyFrame.png"))
 if img is None:
     raise FileNotFoundError("frame non trovato")
 

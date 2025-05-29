@@ -189,7 +189,7 @@ def draw_bb_3d_theta(img, width, length, height, theta, A_3d, B_3d):
     h0 = height
     taillight_height = 1
 
-    # bea
+    # bea version
     box_local = np.array([
         [-w2, -taillight_height, 0],  # rear_left
         [w2, -taillight_height, 0],  # rear_right

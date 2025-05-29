@@ -184,6 +184,14 @@ def iterative_pose_estimation(A_h, B_h, C_h, D_h, K, K_inv, phi_rad,
         'iterations': iteration + 1
     }
 
+def project_points(points_3d, K):
+    """
+    Project 3D points into 2D using the camera intrinsic matrix.
+    """
+    points_3d = np.asarray(points_3d)
+    points_h = (K @ points_3d.T).T
+    points_2d = points_h[:, :2] / points_h[:, 2:3]
+    return points_2d
 
 def draw_bounding_box_3d(ax, pose_result, K, car_width=1.732, car_length=3.997, car_height=1.467):
     """
@@ -192,6 +200,20 @@ def draw_bounding_box_3d(ax, pose_result, K, car_width=1.732, car_length=3.997, 
     A_3d = pose_result['A_3d']
     B_3d = pose_result['B_3d']
     theta = pose_result['theta']
+
+    A_img_hom = K @ A_3d
+    B_img_hom = K @ B_3d
+
+    # Convert from homogeneous to pixel coordinates
+    A_img = (A_img_hom[:2] / A_img_hom[2]).flatten()
+    B_img = (B_img_hom[:2] / B_img_hom[2]).flatten()
+
+    ax.scatter([A_img[0], B_img[0]], [A_img[1], B_img[1]], color=["green", "red"])
+    ax.plot([A_img[0], B_img[0]], [A_img[1], B_img[1]], color="blue")
+
+    # read image
+
+    # Compute the center of the rear axle
 
     taillight_height = 0.930
 
@@ -212,18 +234,15 @@ def draw_bounding_box_3d(ax, pose_result, K, car_width=1.732, car_length=3.997, 
         [-w2, +taillight_height, l0],  # front_left_top
     ])
 
-    cos_theta = np.cos(theta)
-    sin_theta = np.sin(theta)
-    R_y = np.array([
-        [cos_theta, 0, sin_theta],
+    R = np.array([
+        [np.cos(theta), 0, np.sin(theta)],
         [0, 1, 0],
-        [-sin_theta, 0, cos_theta]
+        [-np.sin(theta), 0, np.cos(theta)]
     ])
 
-    vertices_world = (R_y @ box_local.T).T + C0
+    points_cam = (R @ box_local.T).T + C0
+    points_2d = project_points(points_cam, K)
 
-    vertices_h = (K @ vertices_world.T).T
-    vertices_px = (vertices_h[:, :2] / vertices_h[:, 2:3])
 
     edges = [
         (0, 1), (1, 2), (2, 3), (3, 0),  # bottom
@@ -232,17 +251,18 @@ def draw_bounding_box_3d(ax, pose_result, K, car_width=1.732, car_length=3.997, 
     ]
 
     # Draw edges in cyan
-    for i, j in edges:
-        x = [vertices_px[i, 0], vertices_px[j, 0]]
-        y = [vertices_px[i, 1], vertices_px[j, 1]]
-        ax.plot(x, y, color='cyan', linewidth=3)
+    #points_2d = points_2d
+    #for i, j in edges:
+    #    x = [points_2d[i, 0], points_2d[j, 0]]
+    #    y = [points_2d[i, 1], points_2d[j, 1]]
+    #    ax.plot(x, y, color='cyan', linewidth=3)
 
     # Rear face in red
-    rear_edges = [(0, 1), (1, 5), (5, 4), (4, 0)]
-    for i, j in rear_edges:
-        x = [vertices_px[i, 0], vertices_px[j, 0]]
-        y = [vertices_px[i, 1], vertices_px[j, 1]]
-        ax.plot(x, y, color='red', linewidth=4)
+    #rear_edges = [(0, 1), (1, 5), (5, 4), (4, 0)]
+    #for i, j in rear_edges:
+    #    x = [points_2d[i, 0], points_2d[j, 0]]
+    #    y = [points_2d[i, 1], points_2d[j, 1]]
+    #    ax.plot(x, y, color='red', linewidth=4)
 
 
 def visualize_vanishing_geometry(ax, pose_result, img_shape):
@@ -262,6 +282,7 @@ def visualize_vanishing_geometry(ax, pose_result, img_shape):
     if abs(l_inf[1]) > 1e-6:
         x1, x2 = 0, w
         y1 = -(l_inf[0] * x1 + l_inf[2]) / l_inf[1]
+        y2 = -(l_inf[0] * x2 + l_inf[2]) / l_inf[1]
         y2 = -(l_inf[0] * x2 + l_inf[2])
 
 
@@ -289,8 +310,8 @@ if __name__ == "__main__":
     if img is None:
         raise FileNotFoundError(f"Image not found at {img_path}")
 
-    #img_undist = cv.undistort(img, K, dist)
-    img_undist = img
+    img_undist = cv.undistort(img, K, dist)
+
 
     # Define feature points (rear lights and license plate)
     luce_pts = [
@@ -306,17 +327,17 @@ if __name__ == "__main__":
     ]
 
     # Undistort feature points
-    luce_pts_undist = luce_pts
-    #for pt in luce_pts:
-    #    pt_undist = cv.undistortPoints(np.array([[pt]], dtype=np.float32), K, dist, P=K)[0][0]
-    #    pt_undist = np.round(pt_undist).astype(int)
-    #    luce_pts_undist.append(pt_undist)
+    luce_pts_undist = []
+    for pt in luce_pts:
+        pt_undist = cv.undistortPoints(np.array([[pt]], dtype=np.float32), K, dist, P=K)[0][0]
+        pt_undist = np.round(pt_undist).astype(int)
+        luce_pts_undist.append(pt_undist)
 
-    targa_pts_undist = targa_pts
-    #for pt in targa_pts:
-        #pt_undist = cv.undistortPoints(np.array([[pt]], dtype=np.float32), K, dist, P=K)[0][0]
-        #pt_undist = np.round(pt_undist).astype(int)
-        #targa_pts_undist.append(pt_undist)
+    targa_pts_undist = []
+    for pt in targa_pts:
+        pt_undist = cv.undistortPoints(np.array([[pt]], dtype=np.float32), K, dist, P=K)[0][0]
+        pt_undist = np.round(pt_undist).astype(int)
+        targa_pts_undist.append(pt_undist)
 
     # Extract points
     A, B, E, F = luce_pts_undist
@@ -348,7 +369,7 @@ if __name__ == "__main__":
     print(f"Car position (rear axle center): {0.5 * (pose_result['A_3d'] + pose_result['B_3d'])}")
 
     # Visualize results
-    visualize_vanishing_geometry(ax, pose_result, img_undist.shape)
+    #visualize_vanishing_geometry(ax, pose_result, img_undist.shape)
     draw_bounding_box_3d(ax, pose_result, K)
     plt.show()
     # Display result

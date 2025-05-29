@@ -179,53 +179,6 @@ def plot_image_with_horizon_and_projections(img, l_inf, Vz_h, A_h2, B_h2, color_
     plt.grid(True)
     plt.show()
 
-def draw_bb_3d(igm_undist, A_3d, B_3d, u_AB):
-    C0 = 0.5*(A_3d + B_3d)   # rear‐axle midpoint
-    w2 = 1.732  / 2.0
-    l0 = 3.997
-    h0 = 1.467
-
-    # width‐axis = u_AB proiettato orizzontalmente
-    width_axis = np.array([u_AB[0], 0, u_AB[2]])
-    width_axis /= np.linalg.norm(width_axis)
-
-    # length‐axis = rotazione di width_axis di +90° attorno a Y
-    length_axis = np.array([ width_axis[2], 0, -width_axis[0] ])
-
-    # 4 vertici sul ground
-    rear_left  = C0 - w2*width_axis
-    rear_right = C0 + w2*width_axis
-    front_left  = C0 - w2*width_axis + l0*length_axis
-    front_right = C0 + w2*width_axis + l0*length_axis
-
-    # 4 vertici sopra di height
-    rear_left_top   = rear_left  + np.array([0, -h0, 0])
-    rear_right_top  = rear_right + np.array([0, -h0, 0])
-    front_left_top  = front_left  + np.array([0, -h0, 0])
-    front_right_top = front_right + np.array([0, -h0, 0])
-
-    vertices_3d = np.vstack([
-        rear_left, rear_right, front_right, front_left,
-        rear_left_top, rear_right_top, front_right_top, front_left_top
-    ])  # (8×3)
-
-    # in omogenee
-    verts_h = (K @ vertices_3d.T).T   # shape (8,3)
-    # normalizza
-    verts_px = verts_h[:,:2] / verts_h[:,2:3]  # shape (8,2), float
-    verts_px = verts_px.astype(int)
-
-    edges = [
-        (0,1),(1,2),(2,3),(3,0),         # base
-        (4,5),(5,6),(6,7),(7,4),         # top
-        (0,4),(1,5),(2,6),(3,7)          # verticali
-    ]
-
-    for i,j in edges:
-        pt1 = tuple(verts_px[i])
-        pt2 = tuple(verts_px[j])
-        cv.line(img_undist, pt1, pt2, (0,255,0), 2)
-
 def draw_bb_3d_theta(img, width, length, height, theta):
     # box_local shape (8,3)
     C0 = 0.5*(A_3d + B_3d)   # rear‐axle midpoint
@@ -264,6 +217,88 @@ def draw_bb_3d_theta(img, width, length, height, theta):
             (0,4),(1,5),(2,6),(3,7)]
     for i,j in edges:
         cv.line(img, tuple(verts_px[i]), tuple(verts_px[j]), (255,255,255), 10)
+
+def refine_pose_iterative(points_img, AB_dist, CD_dist, phi_rad, theta0, max_iter=10, tol=1e-3):
+    """
+    Iteratively refine vehicle yaw (theta), camera vertical (v_cam) and back-plane normal (n_back).
+
+    Args:
+        points_img : dict with keys 'A','B','C','D'; each a homogeneous [3,] image point
+        AB_dist    : float, real distance between A and B
+        CD_dist    : float, real distance between C and D
+        phi_rad    : float, angle between back-plane and vertical (radians)
+        theta0     : float, initial yaw estimate (radians)
+        max_iter   : int, maximum number of iterations
+        tol        : float, convergence threshold for change in theta
+
+    Returns:
+        theta      : float, refined yaw (rad)
+        v_cam      : array (3,), camera vertical direction unit vector
+        n_back     : array (3,), back-plane normal unit vector
+        history    : list of theta values over iterations
+    """
+    K_inv = np.linalg.inv(K)
+    theta = theta0
+    history = [theta]
+
+    v_cam = np.array([0., 1., 0.])  # placeholder for first iteration
+
+    for k in range(max_iter):
+        # 1) Guess direction from current theta
+        c, s = np.cos(theta), np.sin(theta)
+        u_guess = np.array([c, 0.0, s])  # local vehicle X–Z axis rotated by theta
+
+        # 2) Project u_guess onto horizontal plane orthogonal to v_cam (skip on first iter)
+        if k == 0:
+            u_dir = u_guess
+        else:
+            # remove vertical component
+            u_dir = u_guess - np.dot(u_guess, v_cam) * v_cam
+            u_dir /= np.linalg.norm(u_dir)
+
+        # 3) Triangulate A/B and C/D in 3D
+        A3d, B3d = triangulate_pts(points_img['A'], points_img['B'], AB_dist, u_dir)
+        C3d, D3d = triangulate_pts(points_img['C'], points_img['D'], CD_dist, u_dir)
+
+        # 4) Compute back-plane normal
+        n_back = np.cross(B3d - A3d, D3d - C3d)
+        n_back /= np.linalg.norm(n_back)
+
+        # 5) Compute camera vertical via Rodrigues rotation
+        v_cam = compute_camera_vertical(n_back, u_dir, phi_rad)
+
+        # 6) Update vanishing point and horizon line
+        Vz_h = K @ v_cam
+        l_inf = K_inv.T @ v_cam
+
+        # 7) Project A',B',C',D' to horizon
+        Ah2 = project_to_horizon(points_img['A'], Vz_h, l_inf)
+        Bh2 = project_to_horizon(points_img['B'], Vz_h, l_inf)
+        Ch2 = project_to_horizon(points_img['C'], Vz_h, l_inf)
+        Dh2 = project_to_horizon(points_img['D'], Vz_h, l_inf)
+
+        # Normalize to pixel coords
+        A2 = Ah2[:2] / Ah2[2]
+        B2 = Bh2[:2] / Bh2[2]
+        C2 = Ch2[:2] / Ch2[2]
+        D2 = Dh2[:2] / Dh2[2]
+
+        # 8) Compute two yaw estimates and average
+        theta_AB = np.arctan2(B2[1] - A2[1], B2[0] - A2[0])
+        theta_CD = np.arctan2(D2[1] - C2[1], D2[0] - C2[0])
+        theta_new = 0.5 * (theta_AB + theta_CD)
+
+        # 9) Adaptive damping
+        delta = abs(theta_new - theta)
+        alpha = 0.95 if delta < 0.05 else 0.8
+        theta = alpha * theta_new + (1 - alpha) * theta
+        history.append(theta)
+
+        # 10) Check convergence
+        if delta < tol:
+            break
+
+    return theta, v_cam, n_back, history
 
 K = np.array([
     [3201.4989, 0.0, 1939.82925],
@@ -333,8 +368,8 @@ cv.circle(img_undist, (Vx_px[0], Vx_px[1]), 5, (255, 0, 0), 10)
 d_AB = K_inv @ Vx_h
 u_AB = d_AB / np.linalg.norm(d_AB)
 
-A_3d, B_3d = triangulate_pts(A_h, B_h, 0.52, u_AB)
-C_3d, D_3d = triangulate_pts(C_h, D_h, 0.86, u_AB)
+A_3d, B_3d = triangulate_pts(A_h, B_h, 0.86, u_AB)
+C_3d, D_3d = triangulate_pts(C_h, D_h, 0.52, u_AB)
 
 n_back = np.cross(B_3d - A_3d, D_3d - C_3d)
 n_back /= np.linalg.norm(n_back)
@@ -345,35 +380,25 @@ if n_back[2] < 0:
 v_cam = compute_camera_vertical(n_back, u_AB, np.deg2rad(phi))
 Vz_h = K @ v_cam
 l_inf = np.linalg.inv(K).T @ v_cam
-# draw the vertical vanishing point Vz
-cv.circle(img_undist, (int(Vz_h[0]), int(Vz_h[1])), 5, (0, 0, 255), 10)
-cv.putText(img_undist, "Vz", (int(Vz_h[0]) + 10, int(Vz_h[1]) - 10), cv.FONT_HERSHEY_SIMPLEX, 3, (0, 0, 255), 3)
-# Draw the horizon line l_inf
-cv.line(img_undist, (0, int(-l_inf[2] / l_inf[1])), (img_undist.shape[1], int((-l_inf[2] - l_inf[0] * img_undist.shape[1]) / l_inf[1])), (0, 255, 255), 4)
-cv.putText(img_undist, "l_inf", (10, 50), cv.FONT_HERSHEY_SIMPLEX, 3, (0, 255, 255), 3)
 
 theta = compute_theta(A_h, B_h, Vz_h, l_inf)
 theta_deg = np.degrees(theta)
 
-print(f"Imbardata (theta) calcolata: {theta_deg:.2f} gradi")
+print(f"Stima iniziale theta: {theta_deg:.2f} gradi")
 
-# draw_bb_3d(img_undist, A_3d, B_3d, u_AB)
-draw_bb_3d_theta(img_undist, width=1.732, length=3.997, height=1.467, theta=theta_deg)
+theta, v_cam, n_back, history = refine_pose_iterative(
+    points_img={'A': A_h, 'B': B_h, 'C': C_h, 'D': D_h},
+    AB_dist=0.86,
+    CD_dist=0.52,
+    phi_rad=np.deg2rad(phi),
+    theta0=theta,
+    max_iter=1000,
+    tol=1e-3
+)
 
-# A_pp = project_to_horizon(A_h, Vz_h, l_inf)
-# B_pp = project_to_horizon(B_h, Vz_h, l_inf)
-# E_pp = project_to_horizon(E_h, Vz_h, l_inf)
-# F_pp = project_to_horizon(F_h, Vz_h, l_inf)
+print(f"Stima finale theta: {np.degrees(theta):.2f} gradi")
 
-# # Draw projected points
-# cv.circle(img_undist, (int(A_pp[0]), int(A_pp[1])), 5, (0, 0, 255), 10)
-# cv.putText(img_undist, "A'", (int(A_pp[0]) + 10, int(A_pp[1]) - 10), cv.FONT_HERSHEY_SIMPLEX, 3, (0, 0, 255), 3)
-# cv.circle(img_undist, (int(B_pp[0]), int(B_pp[1])), 5, (0, 0, 255), 10)
-# cv.putText(img_undist, "B'", (int(B_pp[0]) + 10, int(B_pp[1]) - 10), cv.FONT_HERSHEY_SIMPLEX, 3, (0, 0, 255), 3)
-# cv.circle(img_undist, (int(E_pp[0]), int(E_pp[1])), 5, (0, 0, 255), 10)
-# cv.putText(img_undist, "E'", (int(E_pp[0]) + 10, int(E_pp[1]) - 10), cv.FONT_HERSHEY_SIMPLEX, 3, (0, 0, 255), 3)
-# cv.circle(img_undist, (int(F_pp[0]), int(F_pp[1])), 5, (0, 0, 255), 10)
-# cv.putText(img_undist, "F'", (int(F_pp[0]) + 10, int(F_pp[1]) - 10), cv.FONT_HERSHEY_SIMPLEX, 3, (0, 0, 255), 3)
+draw_bb_3d_theta(img_undist, width=1.732, length=3.997, height=1.467, theta=theta)
 
 resized_img = cv.resize(img_undist, (0, 0), fx=0.35, fy=0.35)
 

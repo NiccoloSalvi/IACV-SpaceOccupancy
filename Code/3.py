@@ -4,6 +4,8 @@ import cv2 as cv
 import os
 
 def draw_points(img, A, B, E, F, C, D):
+    A, B, E, F, C, D = map(lambda p: np.round(p).astype(int), [A, B, E, F, C, D])
+
     cv.circle(img, tuple(A), 5, (0, 255, 0), 10)
     cv.putText(img, "A", (A[0] + 10, A[1] - 10), cv.FONT_HERSHEY_SIMPLEX, 3, (0, 255, 0), 3)
     cv.circle(img, tuple(B), 5, (0, 255, 0), 10)
@@ -179,12 +181,25 @@ def plot_image_with_horizon_and_projections(img, l_inf, Vz_h, A_h2, B_h2, color_
     plt.grid(True)
     plt.show()
 
-def draw_bb_3d_theta(img, width, length, height, theta):
+def draw_bb_3d_theta(img, width, length, height, theta, A_3d, B_3d):
     # box_local shape (8,3)
     C0 = 0.5*(A_3d + B_3d)   # rear‐axle midpoint
     w2 = width/2
     l0 = length
     h0 = height
+    taillight_height = 1
+
+    # bea version
+    # box_local = np.array([
+    #     [-w2, -taillight_height, 0],  # rear_left
+    #     [w2, -taillight_height, 0],  # rear_right
+    #     [w2, -taillight_height, -l0],  # front_right
+    #     [-w2, -taillight_height, -l0],  # front_left
+    #     [-w2, +taillight_height, 0],  # rear_left_top
+    #     [w2, +taillight_height, 0],  # rear_right_top
+    #     [w2, +taillight_height, -l0],  # front_right_top
+    #     [-w2, +taillight_height, -l0],  # front_left_top
+    # ])
 
     box_local = np.array([
         [-w2,  0,   0],     # rear_left
@@ -237,12 +252,11 @@ def refine_pose_iterative(points_img, AB_dist, CD_dist, phi_rad, theta0, max_ite
         n_back     : array (3,), back-plane normal unit vector
         history    : list of theta values over iterations
     """
-    K_inv = np.linalg.inv(K)
     theta = theta0
     history = [theta]
 
-    v_cam = np.array([0., 1., 0.])  # placeholder for first iteration
-
+    v_cam = np.array([0.07333071, -0.63076897, 0.77249797])  # get initial camera vertical
+    
     for k in range(max_iter):
         # 1) Guess direction from current theta
         c, s = np.cos(theta), np.sin(theta)
@@ -289,16 +303,18 @@ def refine_pose_iterative(points_img, AB_dist, CD_dist, phi_rad, theta0, max_ite
         theta_new = 0.5 * (theta_AB + theta_CD)
 
         # 9) Adaptive damping
-        delta = abs(theta_new - theta)
+        theta_prev = theta
+        delta = abs(theta - theta_prev)
         alpha = 0.95 if delta < 0.05 else 0.8
-        theta = alpha * theta_new + (1 - alpha) * theta
+        theta = alpha * theta_new + (1-alpha) * theta
         history.append(theta)
 
         # 10) Check convergence
+        print(f"Iter {k+1}: θ = {np.degrees(theta):.4f} deg, Δθ = {np.degrees(delta):.4f} deg")
         if delta < tol:
             break
 
-    return theta, v_cam, n_back, history
+    return theta, v_cam, n_back, history, A3d, B3d, C3d, D3d
 
 K = np.array([
     [3201.4989, 0.0, 1939.82925],
@@ -330,7 +346,6 @@ luce_pts = [
 luce_pts_undist = []
 for pt in luce_pts:
     pt_undist = cv.undistortPoints(np.array([[pt]], dtype=np.float32), K, dist, P=K)[0][0]
-    pt_undist = np.round(pt_undist).astype(int)
     luce_pts_undist.append(pt_undist)
 A, B, E, F = luce_pts_undist[0], luce_pts_undist[1], luce_pts_undist[2], luce_pts_undist[3]
 A_h, B_h, E_h, F_h = np.array([A[0], A[1], 1]), np.array([B[0], B[1], 1]), np.array([E[0], E[1], 1]), np.array([F[0], F[1], 1])
@@ -343,7 +358,6 @@ targa_pts = [
 targa_pts_undist = []
 for pt in targa_pts:
     pt_undist = cv.undistortPoints(np.array([[pt]], dtype=np.float32), K, dist, P=K)[0][0]
-    pt_undist = np.round(pt_undist).astype(int)
     targa_pts_undist.append(pt_undist)
 C, D = targa_pts_undist[0], targa_pts_undist[1]
 C_h, D_h = np.array([C[0], C[1], 1]), np.array([D[0], D[1], 1])
@@ -352,13 +366,19 @@ draw_points(img_undist, A, B, E, F, C, D)
 
 # calcola la linea tra A e B
 line_AB = np.cross(A_h, B_h)
+# convert to pixel coordinates
+A_pp = (A_h[:2] / A_h[2]).astype(int)
+B_pp = (B_h[:2] / B_h[2]).astype(int)
 # draw the line AB
-cv.line(img_undist, (A[0], A[1]), (B[0], B[1]), (0, 255, 0), 4)
+cv.line(img_undist, (A_pp[0], A_pp[1]), (B_pp[0], B_pp[1]), (0, 255, 0), 4)
 
 # calcola la linea tra C e D
 line_CD = np.cross(C_h, D_h)
+# convert to pixel coordinates
+C_pp = (C_h[:2] / C_h[2]).astype(int)
+D_pp = (D_h[:2] / D_h[2]).astype(int)
 # draw the line CD
-cv.line(img_undist, (C[0], C[1]), (D[0], D[1]), (255, 255, 0), 4)
+cv.line(img_undist, (C_pp[0], C_pp[1]), (D_pp[0], D_pp[1]), (255, 255, 0), 4)
 
 Vx_h = np.cross(line_AB, line_CD)
 Vx_px = (Vx_h[:2] / Vx_h[2]).astype(int)
@@ -384,21 +404,23 @@ l_inf = np.linalg.inv(K).T @ v_cam
 theta = compute_theta(A_h, B_h, Vz_h, l_inf)
 theta_deg = np.degrees(theta)
 
-print(f"Stima iniziale theta: {theta_deg:.2f} gradi")
+print(f"θ iniziale: {theta_deg:.4f} deg")
 
-theta, v_cam, n_back, history = refine_pose_iterative(
+theta, v_cam, n_back, history, A_3d_ref, B_3d_ref, _, _ = refine_pose_iterative(
     points_img={'A': A_h, 'B': B_h, 'C': C_h, 'D': D_h},
     AB_dist=0.86,
     CD_dist=0.52,
     phi_rad=np.deg2rad(phi),
     theta0=theta,
-    max_iter=1000,
+    max_iter=10,
     tol=1e-3
 )
 
-print(f"Stima finale theta: {np.degrees(theta):.2f} gradi")
+print("Iterazioni:", len(history))
+print(f"θ finale: {np.degrees(theta):.4f} deg")
+# plt.plot(np.degrees(history)); plt.xlabel("iter"); plt.ylabel("θ [deg]"); plt.show()
 
-draw_bb_3d_theta(img_undist, width=1.732, length=3.997, height=1.467, theta=theta)
+draw_bb_3d_theta(img_undist, width=1.732, length=3.997, height=1.467, theta=theta, A_3d=A_3d_ref, B_3d=B_3d_ref)
 
 resized_img = cv.resize(img_undist, (0, 0), fx=0.35, fy=0.35)
 

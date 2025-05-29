@@ -14,7 +14,6 @@ def draw_box(ax, pts2d, color='lime'):
         y = [pts2d[i][1], pts2d[j][1]]
         ax.plot(x, y, color=color, linewidth=2)
 
-
 # transforms 2d points to homogeneous coordinates
 def to_homogeneous(p):
     return np.array([p[0], p[1], 1.0])

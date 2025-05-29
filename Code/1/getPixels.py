@@ -2,7 +2,8 @@ import cv2
 import numpy as np
 
 # --- PARAMETERS ---
-IMAGE_PATH = "sunnyFrame.png"     # path to your 3840×2160 image
+# IMAGE_PATH = "sunnyFrame.png"     # path to your 3840×2160 image
+IMAGE_PATH = "../outputFolder2/frame_02.png"          # path to your 3840×2160 image
 DISPLAY_SCALE_INIT = 0.25              # initial display scale
 SCALE_STEP = 1.25                      # zoom factor per key press
 SCALE_MIN = 0.1                        # minimum zoom level

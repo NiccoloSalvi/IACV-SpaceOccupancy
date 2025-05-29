@@ -190,27 +190,27 @@ def draw_bb_3d_theta(img, width, length, height, theta, A_3d, B_3d):
     taillight_height = 1
 
     # bea version
-    box_local = np.array([
-        [-w2, -taillight_height, 0],  # rear_left
-        [w2, -taillight_height, 0],  # rear_right
-        [w2, -taillight_height, -l0],  # front_right
-        [-w2, -taillight_height, -l0],  # front_left
-        [-w2, +taillight_height, 0],  # rear_left_top
-        [w2, +taillight_height, 0],  # rear_right_top
-        [w2, +taillight_height, -l0],  # front_right_top
-        [-w2, +taillight_height, -l0],  # front_left_top
-    ])
-
     # box_local = np.array([
-    #     [-w2,  0,   0],     # rear_left
-    #     [ w2,  0,   0],     # rear_right
-    #     [ w2,  0, -l0],     # front_right
-    #     [-w2,  0, -l0],     # front_left
-    #     [-w2, -h0,  0],     # rear_left_top
-    #     [ w2, -h0,  0],     # rear_right_top
-    #     [ w2, -h0, -l0],    # front_right_top
-    #     [-w2, -h0, -l0],    # front_left_top
+    #     [-w2, -taillight_height, 0],  # rear_left
+    #     [w2, -taillight_height, 0],  # rear_right
+    #     [w2, -taillight_height, -l0],  # front_right
+    #     [-w2, -taillight_height, -l0],  # front_left
+    #     [-w2, +taillight_height, 0],  # rear_left_top
+    #     [w2, +taillight_height, 0],  # rear_right_top
+    #     [w2, +taillight_height, -l0],  # front_right_top
+    #     [-w2, +taillight_height, -l0],  # front_left_top
     # ])
+
+    box_local = np.array([
+        [-w2,  0,   0],     # rear_left
+        [ w2,  0,   0],     # rear_right
+        [ w2,  0, -l0],     # front_right
+        [-w2,  0, -l0],     # front_left
+        [-w2, -h0,  0],     # rear_left_top
+        [ w2, -h0,  0],     # rear_right_top
+        [ w2, -h0, -l0],    # front_right_top
+        [-w2, -h0, -l0],    # front_left_top
+    ])
 
     c, s = np.cos(theta), np.sin(theta)
     R = np.array([

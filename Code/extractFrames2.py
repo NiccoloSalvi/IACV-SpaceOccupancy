@@ -2,8 +2,7 @@ import cv2
 import os
 import numpy as np
 
-
-video_path = 'steerVideo.mp4'
+video_path = 'video.mp4'
 output_folder = 'outputFolder2'
 os.makedirs(output_folder, exist_ok=True)
 

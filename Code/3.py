@@ -187,29 +187,17 @@ def draw_bb_3d_theta(img, width, length, height, theta, A_3d, B_3d):
     w2 = width/2
     l0 = length
     h0 = height
-    taillight_height = 1
-
-    # bea version
-    # box_local = np.array([
-    #     [-w2, -taillight_height, 0],  # rear_left
-    #     [w2, -taillight_height, 0],  # rear_right
-    #     [w2, -taillight_height, -l0],  # front_right
-    #     [-w2, -taillight_height, -l0],  # front_left
-    #     [-w2, +taillight_height, 0],  # rear_left_top
-    #     [w2, +taillight_height, 0],  # rear_right_top
-    #     [w2, +taillight_height, -l0],  # front_right_top
-    #     [-w2, +taillight_height, -l0],  # front_left_top
-    # ])
+    taillight_height = 0.9
 
     box_local = np.array([
-        [-w2,  0,   0],     # rear_left
-        [ w2,  0,   0],     # rear_right
-        [ w2,  0, -l0],     # front_right
-        [-w2,  0, -l0],     # front_left
-        [-w2, -h0,  0],     # rear_left_top
-        [ w2, -h0,  0],     # rear_right_top
-        [ w2, -h0, -l0],    # front_right_top
-        [-w2, -h0, -l0],    # front_left_top
+        [-w2, -taillight_height, 0.15],     # rear_left
+        [ w2, -taillight_height, 0.15],     # rear_right
+        [ w2, -taillight_height, -l0 + 0.15],     # front_right
+        [-w2, -taillight_height, -l0 + 0.15],     # front_left
+        [-w2, h0 - taillight_height, 0.15],     # rear_left_top
+        [ w2, h0 - taillight_height, 0.15],     # rear_right_top
+        [ w2, h0 - taillight_height, -l0 + 0.15],    # front_right_top
+        [-w2, h0 - taillight_height, -l0 + 0.15],    # front_left_top
     ])
 
     c, s = np.cos(theta), np.sin(theta)
@@ -225,6 +213,10 @@ def draw_bb_3d_theta(img, width, length, height, theta, A_3d, B_3d):
     # proiezione omogenea
     verts_h = (K @ vertices_world.T).T      # (8,3)
     verts_px = (verts_h[:,:2] / verts_h[:,2:3]).astype(int)
+
+    # draw circle for every vertex
+    for v in verts_px:
+        cv.circle(img, tuple(v), 10, (0, 0, 255), 10)
 
     # disegna ariste
     edges = [(0,1),(1,2),(2,3),(3,0),
@@ -422,7 +414,7 @@ print(f"θ finale: {np.degrees(theta):.4f} deg")
 
 draw_bb_3d_theta(img_undist, width=1.732, length=3.997, height=1.467, theta=theta, A_3d=A_3d_ref, B_3d=B_3d_ref)
 
-resized_img = cv.resize(img_undist, (0, 0), fx=0.35, fy=0.35)
+resized_img = cv.resize(img_undist, (0, 0), fx=0.30, fy=0.30)
 
 # plot_image_with_horizon_and_projections(
 #     img_undist,

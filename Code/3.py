@@ -372,7 +372,9 @@ K_inv = np.linalg.inv(K)
 # Coefficienti di distorsione
 dist = np.array([[0.24377, -1.5955, -0.0011528, 0.00041986, 3.5668]], dtype=np.float64)
 
-phi = 8.50 # angolo tra piano posteriore e verticale in gradi
+phi_rad = np.arctan2(0.15, 0.90) # 0.9 m è l'altezza del faro dal suolo, 0.15 m è la distanza orizzontale dal faro post al retro del veicolo
+phi_deg = np.degrees(phi_rad)
+print(f"phi = {phi_deg:.2f}°")
 
 distAB = 0.86 # distanza reale tra A e B in metri
 distCD = 0.52 # distanza reale tra C e D in metri
@@ -448,7 +450,7 @@ n_back /= np.linalg.norm(n_back)
 if n_back[2] < 0:
     n_back = -n_back
 
-v_cam = compute_camera_vertical(n_back, u_AB, np.deg2rad(phi))
+v_cam = compute_camera_vertical(n_back, u_AB, phi_rad)
 Vz_h = K @ v_cam
 l_inf = np.linalg.inv(K).T @ v_cam
 
@@ -462,7 +464,7 @@ theta_ref, v_cam_ref, n_back_ref, history, A3d_ref, B3d_ref, C3d_ref, D3d_ref, E
     AB_dist=distAB,
     CD_dist=distCD,
     EF_dist=distEF,
-    phi_rad=np.deg2rad(phi),
+    phi_rad=phi_rad,
     theta0=theta,
     vcam0=v_cam,
     max_iter=20,

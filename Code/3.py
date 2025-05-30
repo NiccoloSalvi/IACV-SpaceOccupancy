@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import cv2 as cv
 import os
@@ -484,8 +483,7 @@ width_m  = 1.732
 length_m = 3.997
 height_m = 1.467
 
-# draw_bb_3d_theta(img_undist, width_m, length_m, height_m, theta=0, A_3d=A3d_ref, B_3d=B3d_ref, C_3d=C3d_ref, D_3d=D3d_ref, E_3d=E3d_ref, F_3d=F3d_ref, color=(255, 0, 0))
-draw_bb_3d_theta(img_undist, width_m, length_m, height_m, theta=theta_ref, A_3d=A3d_ref, B_3d=B3d_ref, C_3d=C3d_ref, D_3d=D3d_ref, E_3d=E3d_ref, F_3d=F3d_ref, color=(0, 255, 255))
+draw_bb_3d_theta(img_undist, width_m, length_m, height_m, theta=theta_ref, A_3d=A3d_ref, B_3d=B3d_ref, C_3d=C3d_ref, D_3d=D3d_ref, E_3d=E3d_ref, F_3d=F3d_ref, color=(255, 255, 255))
 
 resized_img = cv.resize(img_undist, (0, 0), fx=0.25, fy=0.25)
 cv.imshow("Immagine Undistorta", resized_img)

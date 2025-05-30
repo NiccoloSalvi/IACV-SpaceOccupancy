@@ -3,20 +3,66 @@ import numpy as np
 import cv2 as cv
 import os
 
-def draw_points(img, A, B, E, F, C, D):
+# ale
+def project_point(K, point_3D):
+    point_3D = point_3D.reshape(3, 1)
+    point_2D_homogeneous = K @ point_3D
+    point_2D = point_2D_homogeneous[:2] / point_2D_homogeneous[2]
+    return point_2D
+
+# ale 
+def transform_and_project_points(img, center_back_car, R, K, color=(0, 0, 255), radius=10):
+    projected_points = {}
+    points_world = {}
+
+    car_width = 1.732  # in meters
+    car_length = 3.997  # in meters
+    taillight_height = 0.9  # in meters
+
+    bounding_box = {
+        "rear_bottom_left": np.array([-car_width/2, taillight_height, 0]),
+        "rear_bottom_right": np.array([car_width/2, taillight_height, 0]),
+        "front_bottom_left": np.array([-car_width/2, taillight_height, -car_length]),
+        "front_bottom_right": np.array([car_width/2, taillight_height, -car_length]),
+        "rear_top_left": np.array([-car_width/2, -taillight_height, 0]),
+        "rear_top_right": np.array([car_width/2, -taillight_height, 0]),
+        "front_top_left": np.array([-car_width/2, -taillight_height, -car_length]),
+        "front_top_right": np.array([car_width/2, -taillight_height, -car_length]),
+    }
+
+    for name, p_local in bounding_box.items():
+        p_world = center_back_car + (R @ p_local)
+        points_world[name] = p_world
+
+        point_2D = project_point(K, p_world)
+        point_2D = np.round(point_2D).flatten()
+        point_2D = tuple(int(x.item()) for x in point_2D)
+
+        projected_points[name] = point_2D
+        cv.circle(img, point_2D, radius, color, -1)
+
+    return projected_points, points_world
+
+# ale
+def draw_edges(img, projected_points, edges, color=(0, 255, 0), thickness=10):
+    for start, end in edges:
+        if start in projected_points and end in projected_points:
+            cv.line(img, projected_points[start], projected_points[end], color, thickness)
+
+def draw_points(img, A, B, E, F, C, D, color=(0, 255, 0)):
     A, B, E, F, C, D = map(lambda p: np.round(p).astype(int), [A, B, E, F, C, D])
 
-    cv.circle(img, tuple(A), 5, (0, 255, 0), 10)
+    cv.circle(img, tuple(A), 5, color, 10)
     cv.putText(img, "A", (A[0] + 10, A[1] - 10), cv.FONT_HERSHEY_SIMPLEX, 3, (0, 255, 0), 3)
-    cv.circle(img, tuple(B), 5, (0, 255, 0), 10)
+    cv.circle(img, tuple(B), 5, color, 10)
     cv.putText(img, "B", (B[0] + 10, B[1] - 10), cv.FONT_HERSHEY_SIMPLEX, 3, (0, 255, 0), 3)
-    cv.circle(img, tuple(E), 5, (0, 255, 0), 10)
+    cv.circle(img, tuple(E), 5, color, 10)
     cv.putText(img, "E", (E[0] + 10, E[1] - 10), cv.FONT_HERSHEY_SIMPLEX, 3, (0, 255, 0), 3)
-    cv.circle(img, tuple(F), 5, (0, 255, 0), 10)
+    cv.circle(img, tuple(F), 5, color, 10)
     cv.putText(img, "F", (F[0] + 10, F[1] - 10), cv.FONT_HERSHEY_SIMPLEX, 3, (0, 255, 0), 3)
-    cv.circle(img, tuple(C), 5, (255, 255, 0), 10)
+    cv.circle(img, tuple(C), 5, color, 10)
     cv.putText(img, "C", (C[0] + 10, C[1] - 10), cv.FONT_HERSHEY_SIMPLEX, 3, (255, 255, 0), 3)
-    cv.circle(img, tuple(D), 5, (255, 255, 0), 10)
+    cv.circle(img, tuple(D), 5, color, 10)
     cv.putText(img, "D", (D[0] + 10, D[1] - 10), cv.FONT_HERSHEY_SIMPLEX, 3, (255, 255, 0), 3)
 
 def triangulate_pts(A_h, B_h, AB_distance, u_AB):
@@ -181,21 +227,27 @@ def plot_image_with_horizon_and_projections(img, l_inf, Vz_h, A_h2, B_h2, color_
     plt.grid(True)
     plt.show()
 
-def draw_bb_3d_theta(img, width, length, height, theta, A_3d, B_3d):
+def draw_bb_3d_theta(img, width, length, height, theta, A_3d, B_3d, C_3d, D_3d, E_3d=None, F_3d=None, color=(0, 255, 0)):
     # box_local shape (8,3)
-    C0 = 0.5*(A_3d + B_3d)   # rear‐axle midpoint
+    # C0 = (A_3d + B_3d) / 2  # rear‐axle midpoint
+    if E_3d is not None and F_3d is not None:
+        print("Using E and F for 6-point average")
+        C0 = (A_3d + B_3d + C_3d + D_3d + E_3d + F_3d) / 6
+    else:
+        print("Using A, B, C, D for 4-point average")
+        C0 = (A_3d + B_3d + C_3d + D_3d) / 4
     w2 = width/2
     l0 = length
     h0 = height
-    taillight_height = 0.9
+    taillight_height = 0.8
 
     box_local = np.array([
-        [-w2, -taillight_height, 0.15],     # rear_left
-        [ w2, -taillight_height, 0.15],     # rear_right
+        [-w2, -taillight_height, -0.3],     # rear_left
+        [ w2, -taillight_height, -0.3],     # rear_right
         [ w2, -taillight_height, -l0 + 0.15],     # front_right
         [-w2, -taillight_height, -l0 + 0.15],     # front_left
-        [-w2, h0 - taillight_height, 0.15],     # rear_left_top
-        [ w2, h0 - taillight_height, 0.15],     # rear_right_top
+        [-w2, h0 - taillight_height, -0.3],     # rear_left_top
+        [ w2, h0 - taillight_height, -0.3],     # rear_right_top
         [ w2, h0 - taillight_height, -l0 + 0.15],    # front_right_top
         [-w2, h0 - taillight_height, -l0 + 0.15],    # front_left_top
     ])
@@ -223,9 +275,75 @@ def draw_bb_3d_theta(img, width, length, height, theta, A_3d, B_3d):
             (4,5),(5,6),(6,7),(7,4),
             (0,4),(1,5),(2,6),(3,7)]
     for i,j in edges:
-        cv.line(img, tuple(verts_px[i]), tuple(verts_px[j]), (255,255,255), 10)
+        cv.line(img, tuple(verts_px[i]), tuple(verts_px[j]), color, 10)
 
-def refine_pose_iterative(points_img, AB_dist, CD_dist, phi_rad, theta0, max_iter=10, tol=1e-3):
+def draw_bounding_box(img, K, C0, u_dir, v_cam, width, length, height, taillight_height, color=(0,255,0), thickness=2):
+    """
+    Draw a full 3D box grounded at y=0, using yaw+pitch from refined pose.
+    - C0: mid‐taillight point (in camera frame)
+    - taillight_height: real world height of taillights above ground
+    """
+    # 0) move C0 down to ground plane
+    #    v_cam points up, so ground_center = C0 - v_cam * taillight_height
+    v_cam = v_cam / np.linalg.norm(v_cam)
+    u_dir = u_dir / np.linalg.norm(u_dir)
+
+    Cg = C0 - v_cam * taillight_height
+
+    # 1) Build a right‐handed frame (camera <- car)
+    x_car = u_dir  # Already normalized
+    y_car = v_cam  # Already normalized
+    z_car = np.cross(x_car, y_car)
+    z_car = z_car / np.linalg.norm(z_car)
+
+    # Re-orthogonalize to ensure perfect orthogonal system
+    y_car = np.cross(z_car, x_car)
+    y_car = y_car / np.linalg.norm(y_car)
+
+    # R = np.stack([x_car, y_car, z_car], axis=1)  # 3×3
+    R = np.stack([x_car, y_car, z_car])  # 3×3
+
+    # 2) make 4×4 transform
+    T = np.eye(4, dtype=np.float64)
+    T[:3,:3] = R
+    T[:3, 3] = Cg
+
+    # 3) define local vertices on [0,height] × [–width/2,width/2] × [0,–length]
+    w2 = width/2
+    l0 = length
+    h0 = height
+    verts_local = np.array([
+        [-w2,   0.0,   0.0],  # back-left bottom
+        [ w2,   0.0,   0.0],  # back-right bottom
+        [ w2,   0.0,  -l0 ],  # front-right bottom
+        [-w2,   0.0,  -l0 ],  # front-left bottom
+        [-w2,   h0,    0.0],  # back-left top
+        [ w2,   h0,    0.0],  # back-right top
+        [ w2,   h0,   -l0 ],  # front-right top
+        [-w2,   h0,   -l0 ],  # front-left top
+    ], dtype=np.float64)       # 8×3
+
+    # 4) transform into camera frame
+    ones    = np.ones((8,1), dtype=np.float64)
+    verts_h = np.hstack([verts_local, ones])      # 8×4
+    verts_c = (T @ verts_h.T).T[:, :3]            # 8×3
+
+    # 5) project with K
+    proj = (K @ verts_c.T).T                      # 8×3
+    pts  = (proj[:,:2] / proj[:,2:3]).astype(int) # 8×2
+
+    # 6) draw edges
+    edges = [
+        (0,1),(1,2),(2,3),(3,0),  # bottom
+        (4,5),(5,6),(6,7),(7,4),  # top
+        (0,4),(1,5),(2,6),(3,7)   # vertical
+    ]
+    for i,j in edges:
+        cv.line(img, tuple(pts[i]), tuple(pts[j]), color, thickness)
+
+    return img
+
+def refine_pose_iterative(points_img, AB_dist, CD_dist, phi_rad, theta0, vcam0, EF_dist=None, max_iter=10, tol=1e-3):
     """
     Iteratively refine vehicle yaw (theta), camera vertical (v_cam) and back-plane normal (n_back).
 
@@ -233,6 +351,7 @@ def refine_pose_iterative(points_img, AB_dist, CD_dist, phi_rad, theta0, max_ite
         points_img : dict with keys 'A','B','C','D'; each a homogeneous [3,] image point
         AB_dist    : float, real distance between A and B
         CD_dist    : float, real distance between C and D
+        EF_dist    : float, real distance between E and F
         phi_rad    : float, angle between back-plane and vertical (radians)
         theta0     : float, initial yaw estimate (radians)
         max_iter   : int, maximum number of iterations
@@ -247,7 +366,7 @@ def refine_pose_iterative(points_img, AB_dist, CD_dist, phi_rad, theta0, max_ite
     theta = theta0
     history = [theta]
 
-    v_cam = np.array([0.07333071, -0.63076897, 0.77249797])  # get initial camera vertical
+    v_cam = vcam0  # get initial camera vertical
     
     for k in range(max_iter):
         # 1) Guess direction from current theta
@@ -265,10 +384,32 @@ def refine_pose_iterative(points_img, AB_dist, CD_dist, phi_rad, theta0, max_ite
         # 3) Triangulate A/B and C/D in 3D
         A3d, B3d = triangulate_pts(points_img['A'], points_img['B'], AB_dist, u_dir)
         C3d, D3d = triangulate_pts(points_img['C'], points_img['D'], CD_dist, u_dir)
+        # # If E/F are provided, triangulate them too
+        if 'E' in points_img and 'F' in points_img and EF_dist is not None:
+            E3d, F3d = triangulate_pts(points_img['E'], points_img['F'], EF_dist, u_dir)
 
+        """"
         # 4) Compute back-plane normal
         n_back = np.cross(B3d - A3d, D3d - C3d)
         n_back /= np.linalg.norm(n_back)
+        if n_back[2] < 0:
+            n_back = -n_back
+        """
+        
+        # 4) Compute back-plane normal via SVD on all available rear‐side points
+        pts = [A3d, B3d, C3d, D3d]
+        if 'E' in points_img and 'F' in points_img and EF_dist is not None:
+            pts += [E3d, F3d]
+
+        pts = np.vstack(pts)           # shape (N,3), N=4 or 6
+        centroid = pts.mean(axis=0)    # baricentro
+        # PCA: l'ultima componente di V^T è la direzione di minore varianza → normale
+        _, _, Vt = np.linalg.svd(pts - centroid)
+        n_back = Vt[-1]                
+        n_back /= np.linalg.norm(n_back)
+        # facoltativo: assicura che punti verso la camera
+        if n_back[2] < 0:
+            n_back = -n_back
 
         # 5) Compute camera vertical via Rodrigues rotation
         v_cam = compute_camera_vertical(n_back, u_dir, phi_rad)
@@ -282,31 +423,57 @@ def refine_pose_iterative(points_img, AB_dist, CD_dist, phi_rad, theta0, max_ite
         Bh2 = project_to_horizon(points_img['B'], Vz_h, l_inf)
         Ch2 = project_to_horizon(points_img['C'], Vz_h, l_inf)
         Dh2 = project_to_horizon(points_img['D'], Vz_h, l_inf)
+        if 'E' in points_img and 'F' in points_img and EF_dist is not None:
+            Eh2 = project_to_horizon(points_img['E'], Vz_h, l_inf)
+            Fh2 = project_to_horizon(points_img['F'], Vz_h, l_inf)
 
         # Normalize to pixel coords
         A2 = Ah2[:2] / Ah2[2]
         B2 = Bh2[:2] / Bh2[2]
         C2 = Ch2[:2] / Ch2[2]
         D2 = Dh2[:2] / Dh2[2]
+        if 'E' in points_img and 'F' in points_img and EF_dist is not None:
+            E2 = Eh2[:2] / Eh2[2]
+            F2 = Fh2[:2] / Fh2[2]
 
-        # 8) Compute two yaw estimates and average
-        theta_AB = np.arctan2(B2[1] - A2[1], B2[0] - A2[0])
-        theta_CD = np.arctan2(D2[1] - C2[1], D2[0] - C2[0])
-        theta_new = 0.5 * (theta_AB + theta_CD)
+        # 8) compute unit‐vectors for AB and CD
+        th_AB = np.arctan2(B2[1]-A2[1], B2[0]-A2[0])
+        th_CD = np.arctan2(D2[1]-C2[1], D2[0]-C2[0])
+        if 'E' in points_img and 'F' in points_img and EF_dist is not None:
+            th_EF = np.arctan2(F2[1]-E2[1], F2[0]-E2[0])
+            angles = np.array([th_AB, th_CD, th_EF])
+        else:
+            angles = np.array([th_AB, th_CD])
 
-        # 9) Adaptive damping
-        theta_prev = theta
-        delta = abs(theta - theta_prev)
-        alpha = 0.95 if delta < 0.05 else 0.8
-        theta = alpha * theta_new + (1-alpha) * theta
+        # 9) circular mean
+        vecs = np.exp(1j * angles)
+        mean_vec = vecs.mean()
+        theta_mean = np.arctan2(mean_vec.imag, mean_vec.real)
+
+        # 10) signed difference & damping
+        delta = (theta_mean - theta + np.pi) % (2*np.pi) - np.pi
+
+        # adaptive damping
+        if k < 3:
+            alpha = 0.2
+        else:
+            alpha = 0.8 if abs(delta) > 0.05 else 0.95
+
+        theta += alpha * delta
+        # wrap back into [-pi,pi]
+        theta = (theta + np.pi) % (2*np.pi) - np.pi
+
         history.append(theta)
-
-        # 10) Check convergence
+        
         print(f"Iter {k+1}: θ = {np.degrees(theta):.4f} deg, Δθ = {np.degrees(delta):.4f} deg")
-        if delta < tol:
+        
+        # 11) convergence on |delta|
+        if abs(delta) < tol:
             break
-
-    return theta, v_cam, n_back, history, A3d, B3d, C3d, D3d
+        
+    if EF_dist is not None:
+        return theta, v_cam, n_back, history, A3d, B3d, C3d, D3d, E3d, F3d, u_dir
+    return theta, v_cam, n_back, history, A3d, B3d, C3d, D3d, None, None, u_dir
 
 K = np.array([
     [3201.4989, 0.0, 1939.82925],
@@ -318,7 +485,12 @@ K_inv = np.linalg.inv(K)
 # Coefficienti di distorsione
 dist = np.array([[0.24377, -1.5955, -0.0011528, 0.00041986, 3.5668]], dtype=np.float64)
 
-phi = 8.53  # angolo tra piano posteriore e verticale in gradi
+phi = 8.50 # angolo tra piano posteriore e verticale in gradi
+
+distAB = 0.86 # distanza reale tra A e B in metri
+distCD = 0.52 # distanza reale tra C e D in metri
+distEF = 1.40 # distanza reale tra E e F in metri (se disponibili)
+# distEF = None  # se non si usano le luci posteriori esterne, impostare a None
 
 # Carica immagine
 img = cv.imread(os.path.join(os.getcwd(), "Code", "OutputFolder2", "frame_02.png"))
@@ -362,7 +534,7 @@ line_AB = np.cross(A_h, B_h)
 A_pp = (A_h[:2] / A_h[2]).astype(int)
 B_pp = (B_h[:2] / B_h[2]).astype(int)
 # draw the line AB
-cv.line(img_undist, (A_pp[0], A_pp[1]), (B_pp[0], B_pp[1]), (0, 255, 0), 4)
+cv.line(img_undist, (A_pp[0], A_pp[1]), (B_pp[0], B_pp[1]), (0, 255, 0), 10)
 
 # calcola la linea tra C e D
 line_CD = np.cross(C_h, D_h)
@@ -370,7 +542,7 @@ line_CD = np.cross(C_h, D_h)
 C_pp = (C_h[:2] / C_h[2]).astype(int)
 D_pp = (D_h[:2] / D_h[2]).astype(int)
 # draw the line CD
-cv.line(img_undist, (C_pp[0], C_pp[1]), (D_pp[0], D_pp[1]), (255, 255, 0), 4)
+cv.line(img_undist, (C_pp[0], C_pp[1]), (D_pp[0], D_pp[1]), (255, 255, 0), 10)
 
 Vx_h = np.cross(line_AB, line_CD)
 Vx_px = (Vx_h[:2] / Vx_h[2]).astype(int)
@@ -380,8 +552,8 @@ cv.circle(img_undist, (Vx_px[0], Vx_px[1]), 5, (255, 0, 0), 10)
 d_AB = K_inv @ Vx_h
 u_AB = d_AB / np.linalg.norm(d_AB)
 
-A_3d, B_3d = triangulate_pts(A_h, B_h, 0.86, u_AB)
-C_3d, D_3d = triangulate_pts(C_h, D_h, 0.52, u_AB)
+A_3d, B_3d = triangulate_pts(A_h, B_h, distAB, u_AB)
+C_3d, D_3d = triangulate_pts(C_h, D_h, distCD, u_AB)
 
 n_back = np.cross(B_3d - A_3d, D_3d - C_3d)
 n_back /= np.linalg.norm(n_back)
@@ -398,41 +570,68 @@ theta_deg = np.degrees(theta)
 
 print(f"θ iniziale: {theta_deg:.4f} deg")
 
-theta, v_cam, n_back, history, A_3d_ref, B_3d_ref, _, _ = refine_pose_iterative(
-    points_img={'A': A_h, 'B': B_h, 'C': C_h, 'D': D_h},
-    AB_dist=0.86,
-    CD_dist=0.52,
+theta_ref, v_cam_ref, n_back_ref, history, A3d_ref, B3d_ref, C3d_ref, D3d_ref, E3d_ref, F3d_ref, u_dir_ref = refine_pose_iterative(
+    points_img={'A': A_h, 'B': B_h, 'C': C_h, 'D': D_h, 'E': E_h, 'F': F_h},
+    AB_dist=distAB,
+    CD_dist=distCD,
+    EF_dist=distEF,
     phi_rad=np.deg2rad(phi),
     theta0=theta,
-    max_iter=10,
+    vcam0=v_cam,
+    max_iter=20,
     tol=1e-3
 )
 
 print("Iterazioni:", len(history))
-print(f"θ finale: {np.degrees(theta):.4f} deg")
-# plt.plot(np.degrees(history)); plt.xlabel("iter"); plt.ylabel("θ [deg]"); plt.show()
+print(f"θ finale: {np.degrees(theta_ref):.4f} deg")
+print(f"Distanza A-B calcolata: {np.linalg.norm(B3d_ref - A3d_ref):.3f} (expected: {distAB:.2f})")
+print(f"Distanza C-D calcolata: {np.linalg.norm(D3d_ref - C3d_ref):.3f} (expected: {distCD:.2f})")
+if distEF is not None:
+    print(f"Distanza E-F calcolata: {np.linalg.norm(F3d_ref - E3d_ref):.3f} (expected: {distEF:.2f})")
+print(f"Normale piano: {n_back_ref}")
+print(f"Verticale camera: {v_cam_ref}")
 
-draw_bb_3d_theta(img_undist, width=1.732, length=3.997, height=1.467, theta=theta, A_3d=A_3d_ref, B_3d=B_3d_ref)
+# width, length, height in meters (your vehicle dims)
+width_m  = 1.732
+length_m = 3.997
+height_m = 1.467
 
-resized_img = cv.resize(img_undist, (0, 0), fx=0.30, fy=0.30)
+# draw_bb_3d_theta(img_undist, width_m, length_m, height_m, theta=0, A_3d=A3d_ref, B_3d=B3d_ref, C_3d=C3d_ref, D_3d=D3d_ref, E_3d=E3d_ref, F_3d=F3d_ref, color=(255, 0, 0))
+draw_bb_3d_theta(img_undist, width_m, length_m, height_m, theta=theta_ref, A_3d=A3d_ref, B_3d=B3d_ref, C_3d=C3d_ref, D_3d=D3d_ref, E_3d=E3d_ref, F_3d=F3d_ref, color=(0, 255, 255))
 
-# plot_image_with_horizon_and_projections(
-#     img_undist,
-#     l_inf=l_inf,         # [a, b, c]
-#     Vz_h=Vz_h,           # homogeneous V_z
-#     A_h2=A_pp,     # homogeneous A''
-#     B_h2=B_pp      # homogeneous B''
-# )
+C0 = (A3d_ref + B3d_ref) / 2  # rear‐axle midpoint
+theta_ref_ale = np.deg2rad(5)
+# theta_ref = np.deg2rad(5.19)  # convert to radians for rotation matrix
+R = np.array([
+    [np.cos(theta_ref_ale), 0, np.sin(theta_ref_ale)],
+    [0, 1, 0],
+    [-np.sin(theta_ref_ale), 0, np.cos(theta_ref_ale)]
+])
+projected_points, bounding_box_world = transform_and_project_points(img_undist, C0, R, K, (0, 0, 0))
 
+# Disegna edges della bounding box 3D
+"""
+draw_edges(img_undist, projected_points, [
+    ("rear_bottom_left", "rear_bottom_right"),
+    ("rear_bottom_right", "front_bottom_right"),
+    ("front_bottom_right", "front_bottom_left"),
+    ("front_bottom_left", "rear_bottom_left"),
+
+    ("rear_top_left", "rear_top_right"),
+    ("rear_top_right", "front_top_right"),
+    ("front_top_right", "front_top_left"),
+    ("front_top_left", "rear_top_left"),
+
+    ("rear_bottom_left", "rear_top_left"),
+    ("rear_bottom_right", "rear_top_right"),
+    ("front_bottom_right", "front_top_right"),
+    ("front_bottom_left", "front_top_left")
+])
+"""
+
+# img_undist = draw_bounding_box(img_undist, K, A3d_ref*0+0.5*(A3d_ref+B3d_ref), u_dir_ref, v_cam_ref, width_m, length_m, height_m, taillight_height=0.90, color=(0,255,0), thickness=3)
+
+resized_img = cv.resize(img_undist, (0, 0), fx=0.25, fy=0.25)
 cv.imshow("Immagine Undistorta", resized_img)
 cv.waitKey(0)
 cv.destroyAllWindows()
-
-# 1. PHI = 8.53
-# 2. Vx
-# 3. Vz
-# # l_inf horiz
-# trasla punti rispetto a Z camera
-# A'' su l_inf
-# calcoli theta
-# update Vz, l_inf

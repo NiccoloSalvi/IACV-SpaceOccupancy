@@ -3,52 +3,6 @@ import numpy as np
 import cv2 as cv
 import os
 
-# ale
-def project_point(K, point_3D):
-    point_3D = point_3D.reshape(3, 1)
-    point_2D_homogeneous = K @ point_3D
-    point_2D = point_2D_homogeneous[:2] / point_2D_homogeneous[2]
-    return point_2D
-
-# ale 
-def transform_and_project_points(img, center_back_car, R, K, color=(0, 0, 255), radius=10):
-    projected_points = {}
-    points_world = {}
-
-    car_width = 1.732  # in meters
-    car_length = 3.997  # in meters
-    taillight_height = 0.9  # in meters
-
-    bounding_box = {
-        "rear_bottom_left": np.array([-car_width/2, taillight_height, 0]),
-        "rear_bottom_right": np.array([car_width/2, taillight_height, 0]),
-        "front_bottom_left": np.array([-car_width/2, taillight_height, -car_length]),
-        "front_bottom_right": np.array([car_width/2, taillight_height, -car_length]),
-        "rear_top_left": np.array([-car_width/2, -taillight_height, 0]),
-        "rear_top_right": np.array([car_width/2, -taillight_height, 0]),
-        "front_top_left": np.array([-car_width/2, -taillight_height, -car_length]),
-        "front_top_right": np.array([car_width/2, -taillight_height, -car_length]),
-    }
-
-    for name, p_local in bounding_box.items():
-        p_world = center_back_car + (R @ p_local)
-        points_world[name] = p_world
-
-        point_2D = project_point(K, p_world)
-        point_2D = np.round(point_2D).flatten()
-        point_2D = tuple(int(x.item()) for x in point_2D)
-
-        projected_points[name] = point_2D
-        cv.circle(img, point_2D, radius, color, -1)
-
-    return projected_points, points_world
-
-# ale
-def draw_edges(img, projected_points, edges, color=(0, 255, 0), thickness=10):
-    for start, end in edges:
-        if start in projected_points and end in projected_points:
-            cv.line(img, projected_points[start], projected_points[end], color, thickness)
-
 def draw_points(img, A, B, E, F, C, D, color=(0, 255, 0)):
     A, B, E, F, C, D = map(lambda p: np.round(p).astype(int), [A, B, E, F, C, D])
 
@@ -276,72 +230,6 @@ def draw_bb_3d_theta(img, width, length, height, theta, A_3d, B_3d, C_3d, D_3d, 
             (0,4),(1,5),(2,6),(3,7)]
     for i,j in edges:
         cv.line(img, tuple(verts_px[i]), tuple(verts_px[j]), color, 10)
-
-def draw_bounding_box(img, K, C0, u_dir, v_cam, width, length, height, taillight_height, color=(0,255,0), thickness=2):
-    """
-    Draw a full 3D box grounded at y=0, using yaw+pitch from refined pose.
-    - C0: mid‐taillight point (in camera frame)
-    - taillight_height: real world height of taillights above ground
-    """
-    # 0) move C0 down to ground plane
-    #    v_cam points up, so ground_center = C0 - v_cam * taillight_height
-    v_cam = v_cam / np.linalg.norm(v_cam)
-    u_dir = u_dir / np.linalg.norm(u_dir)
-
-    Cg = C0 - v_cam * taillight_height
-
-    # 1) Build a right‐handed frame (camera <- car)
-    x_car = u_dir  # Already normalized
-    y_car = v_cam  # Already normalized
-    z_car = np.cross(x_car, y_car)
-    z_car = z_car / np.linalg.norm(z_car)
-
-    # Re-orthogonalize to ensure perfect orthogonal system
-    y_car = np.cross(z_car, x_car)
-    y_car = y_car / np.linalg.norm(y_car)
-
-    # R = np.stack([x_car, y_car, z_car], axis=1)  # 3×3
-    R = np.stack([x_car, y_car, z_car])  # 3×3
-
-    # 2) make 4×4 transform
-    T = np.eye(4, dtype=np.float64)
-    T[:3,:3] = R
-    T[:3, 3] = Cg
-
-    # 3) define local vertices on [0,height] × [–width/2,width/2] × [0,–length]
-    w2 = width/2
-    l0 = length
-    h0 = height
-    verts_local = np.array([
-        [-w2,   0.0,   0.0],  # back-left bottom
-        [ w2,   0.0,   0.0],  # back-right bottom
-        [ w2,   0.0,  -l0 ],  # front-right bottom
-        [-w2,   0.0,  -l0 ],  # front-left bottom
-        [-w2,   h0,    0.0],  # back-left top
-        [ w2,   h0,    0.0],  # back-right top
-        [ w2,   h0,   -l0 ],  # front-right top
-        [-w2,   h0,   -l0 ],  # front-left top
-    ], dtype=np.float64)       # 8×3
-
-    # 4) transform into camera frame
-    ones    = np.ones((8,1), dtype=np.float64)
-    verts_h = np.hstack([verts_local, ones])      # 8×4
-    verts_c = (T @ verts_h.T).T[:, :3]            # 8×3
-
-    # 5) project with K
-    proj = (K @ verts_c.T).T                      # 8×3
-    pts  = (proj[:,:2] / proj[:,2:3]).astype(int) # 8×2
-
-    # 6) draw edges
-    edges = [
-        (0,1),(1,2),(2,3),(3,0),  # bottom
-        (4,5),(5,6),(6,7),(7,4),  # top
-        (0,4),(1,5),(2,6),(3,7)   # vertical
-    ]
-    for i,j in edges:
-        cv.line(img, tuple(pts[i]), tuple(pts[j]), color, thickness)
-
-    return img
 
 def refine_pose_iterative(points_img, AB_dist, CD_dist, phi_rad, theta0, vcam0, EF_dist=None, max_iter=10, tol=1e-3):
     """
@@ -598,38 +486,6 @@ height_m = 1.467
 
 # draw_bb_3d_theta(img_undist, width_m, length_m, height_m, theta=0, A_3d=A3d_ref, B_3d=B3d_ref, C_3d=C3d_ref, D_3d=D3d_ref, E_3d=E3d_ref, F_3d=F3d_ref, color=(255, 0, 0))
 draw_bb_3d_theta(img_undist, width_m, length_m, height_m, theta=theta_ref, A_3d=A3d_ref, B_3d=B3d_ref, C_3d=C3d_ref, D_3d=D3d_ref, E_3d=E3d_ref, F_3d=F3d_ref, color=(0, 255, 255))
-
-C0 = (A3d_ref + B3d_ref) / 2  # rear‐axle midpoint
-theta_ref_ale = np.deg2rad(5)
-# theta_ref = np.deg2rad(5.19)  # convert to radians for rotation matrix
-R = np.array([
-    [np.cos(theta_ref_ale), 0, np.sin(theta_ref_ale)],
-    [0, 1, 0],
-    [-np.sin(theta_ref_ale), 0, np.cos(theta_ref_ale)]
-])
-projected_points, bounding_box_world = transform_and_project_points(img_undist, C0, R, K, (0, 0, 0))
-
-# Disegna edges della bounding box 3D
-"""
-draw_edges(img_undist, projected_points, [
-    ("rear_bottom_left", "rear_bottom_right"),
-    ("rear_bottom_right", "front_bottom_right"),
-    ("front_bottom_right", "front_bottom_left"),
-    ("front_bottom_left", "rear_bottom_left"),
-
-    ("rear_top_left", "rear_top_right"),
-    ("rear_top_right", "front_top_right"),
-    ("front_top_right", "front_top_left"),
-    ("front_top_left", "rear_top_left"),
-
-    ("rear_bottom_left", "rear_top_left"),
-    ("rear_bottom_right", "rear_top_right"),
-    ("front_bottom_right", "front_top_right"),
-    ("front_bottom_left", "front_top_left")
-])
-"""
-
-# img_undist = draw_bounding_box(img_undist, K, A3d_ref*0+0.5*(A3d_ref+B3d_ref), u_dir_ref, v_cam_ref, width_m, length_m, height_m, taillight_height=0.90, color=(0,255,0), thickness=3)
 
 resized_img = cv.resize(img_undist, (0, 0), fx=0.25, fy=0.25)
 cv.imshow("Immagine Undistorta", resized_img)

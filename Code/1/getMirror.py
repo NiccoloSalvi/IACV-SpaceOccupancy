@@ -50,7 +50,7 @@ def yolo_detection(image, cfg_path="yolo/yolov4.cfg", weights_path="yolo/yolov4.
 
     return None, None, None
 
-frame1 = cv2.imread("outputFolder/frame_0013.png")
+frame1 = cv2.imread("outputFolder/frame_10.png")
 if frame1 is None:
     print("Image not found")
     exit()
@@ -102,7 +102,8 @@ if not extreme_point:
     exit()
     
 mirror_point = (extreme_point[0] + offset_x, extreme_point[1] + offset_y)
-cv2.circle(frame1, mirror_point, 10, (0, 0, 255), -1)
+print(f"Mirror detected at: {mirror_point}")
+cv2.circle(frame1, mirror_point, 10, (0, 255, 0), -1)
 frame1 = cv2.resize(frame1, (frame1.shape[1] // 4, frame1.shape[0] // 4), interpolation=cv2.INTER_AREA)
 cv2.imshow("Image with Mirror Detected", frame1)
 cv2.waitKey(0)

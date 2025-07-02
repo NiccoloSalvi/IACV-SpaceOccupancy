@@ -3,17 +3,14 @@ import os
 import numpy as np
 
 video_path = 'video.mp4'
-output_folder = 'outputFolder2'
+output_folder = 'extractedFrames'
 os.makedirs(output_folder, exist_ok=True)
-
 
 cap = cv2.VideoCapture(video_path)
 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-
 qty = 20
 frame_indices = np.linspace(0, total_frames - 1, qty, dtype=int)
-
 
 frame_num = 0
 saved_count = 0

@@ -18,19 +18,19 @@ This project addresses the specific challenge of developing a vision-based syste
 
 ## 🧠 Methods Implemented
 
-### **method1/**: Standard Localization via Homography
+### **method1**: Standard Localization via Homography
 
 → Uses four coplanar points on the rear facade of the car (e.g., rear lights and license plate corners) to estimate pose from a single image using homography decomposition.
 
-### **method2/**: Nighttime Localization from Image Pairs
+### **method2**: Nighttime Localization from Image Pairs
 
 → Designed for low-light settings, this method uses symmetric rear light points tracked across two frames. It exploits temporal motion cues to estimate the pose of the vehicle on the road.
 
-### **method3/**: Localization under Poor Perspective using Out-of-Plane Symmetric Features
+### **method3**: Localization under Poor Perspective using Out-of-Plane Symmetric Features
 
 → When perspective cues are weak, this method uses symmetric features located on different planes of the car’s 3D structure (e.g., lights and mirrors) to recover pose by exploiting inter-frame symmetry and vanishing geometry.
 
-### **method4/**: PnP-based Vehicle Pose Estimation from Key Points
+### **method4**: PnP-based Vehicle Pose Estimation from Key Points
 
 → This method estimates the vehicle’s 3D pose from a single image by solving the Perspective-n-Point (PnP) problem using a set of known 3D key points (e.g., rear lights, license plate corners, and side mirror) and their 2D projections. By including non-coplanar points such as the side mirror, the method improves robustness and accuracy, especially in low-perspective conditions.
 

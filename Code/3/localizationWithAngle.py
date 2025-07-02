@@ -39,11 +39,17 @@ def draw_edges(img, projected_points, edges, color=(0, 255, 0), thickness=10):
 
 img = cv2.imread("OutputFolder/frame_02.png")
 
+# K = np.array([
+#     [3315.65306, 0.0, 1910.87753],
+#     [0.0, 3319.89314, 1072.38815],
+#     [0.0, 0.0, 1.0]
+# ], dtype=np.float32)
+
 K = np.array([
-    [3315.65306, 0.0, 1910.87753],
-    [0.0, 3319.89314, 1072.38815],
-    [0.0, 0.0, 1.0]
-], dtype=np.float32)
+    [3.2014989e3, 0.0, 1.93982925e3],
+    [0.0, 3.20637527e3, 1.06315413e3],
+    [0.0, 0.0, 1]
+], dtype=np.float64)
 
 car_width = 1.732
 car_length = 3.997

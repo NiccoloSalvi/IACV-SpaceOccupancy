@@ -19,19 +19,6 @@ def draw_points(img, A, B, E, F, C, D, color=(0, 255, 0)):
     cv.putText(img, "D", (D[0] + 10, D[1] - 10), cv.FONT_HERSHEY_SIMPLEX, 3, (255, 255, 0), 3)
 
 def triangulate_pts(A_h, B_h, AB_distance, u_AB):
-    """
-    Triangulate 3D points A and B from their image projections and known real-world separation.
-
-    Args:
-        K           : (3x3) camera intrinsic matrix
-        A_h        : homogeneus coordinates of A' (left rear-light)
-        B_h         : homogeneus coordinates of B' (right rear-light)
-        AB_distance : real distance between A and B (scalar)
-        u_AB        : unit 3D direction vector of AB (from Vx back-projection)
-
-    Returns:
-        A_3d, B_3d : 3D coordinates of points A and B in camera frame
-    """
     # Back-project to normalized camera rays
     ray_A = K_inv @ A_h
     ray_B = K_inv @ B_h
@@ -53,17 +40,6 @@ def triangulate_pts(A_h, B_h, AB_distance, u_AB):
     return A_3d, B_3d
 
 def compute_camera_vertical(n_back, u_dir, phi_rad):
-    """
-    Compute the camera vertical direction vector from the back-plane normal and yaw axis u_dir.
-
-    Args:
-        n_back : array-like shape (3,) normal of the back plane in camera coords
-        u_dir  : array-like shape (3,) unit direction vector of AB axis
-        phi_rad: float, angle between back plane and vertical in radians
-
-    Returns:
-        v_cam  : array shape (3,) unit vector pointing upward in camera frame
-    """
     # Ensure arrays
     n_b = np.asarray(n_back).reshape(3,)
     u = np.asarray(u_dir).reshape(3,)
@@ -83,12 +59,6 @@ def compute_camera_vertical(n_back, u_dir, phi_rad):
     return v_cam
 
 def project_to_horizon(point_img, Vz_h, l_inf):
-    """
-    Proietta il punto immagine sulla linea dell'orizzonte
-    point_img: [x, y, 1] punto nell'immagine
-    Vz_h: vanishing point verticale
-    l_inf: linea dell'orizzonte
-    """
     # Linea che connette Vz al punto (direzione verticale attraverso il punto)
     vertical_line = np.cross(Vz_h, point_img)
     
@@ -102,18 +72,6 @@ def project_to_horizon(point_img, Vz_h, l_inf):
     return point_on_horizon
 
 def compute_theta(A_h, B_h, Vz_h, l_inf):
-    """
-    Calcola l'imbardata theta dal punto immagine A' e B'.
-    
-    Args:
-        A_h   : array-like shape (3,) = [u_A, v_A, 1]
-        B_h   : array-like shape (3,) = [u_B, v_B, 1]
-        Vz_h  : array-like shape (3,) = punto di fuga verticale in omogenee
-        l_inf : array-like shape (3,) = linea all'infinito (horizon line) in omogenee
-
-    Returns:
-        theta_rad : imbardata in radianti
-    """
     # Proietta A' e B' sull'orizzonte
     Ah2 = project_to_horizon(A_h, Vz_h, l_inf)
     Bh2 = project_to_horizon(B_h, Vz_h, l_inf)
@@ -131,13 +89,6 @@ def compute_theta(A_h, B_h, Vz_h, l_inf):
     return theta_rad
 
 def plot_image_with_horizon_and_projections(img, l_inf, Vz_h, A_h2, B_h2, color_line='y'):
-    """
-    Mostra immagine, linea all'infinito, punto di fuga verticale, proiezioni A'' e B''
-    - img      : immagine BGR (OpenCV)
-    - l_inf    : linea all'infinito in omogenee [a, b, c]
-    - Vz_h     : vanishing point verticale in omogenee
-    - A_h2/B_h2: proiezioni omogenee di A', B' su l_inf
-    """
     h, w = img.shape[:2]
     a, b, c = l_inf
 
@@ -256,11 +207,11 @@ def refine_pose_iterative(points_img, AB_dist, CD_dist, phi_rad, theta0, vcam0, 
     v_cam = vcam0  # get initial camera vertical
     
     for k in range(max_iter):
-        # 1) Guess direction from current theta
+        # Guess direction from current theta
         c, s = np.cos(theta), np.sin(theta)
         u_guess = np.array([c, 0.0, s])  # local vehicle X–Z axis rotated by theta
 
-        # 2) Project u_guess onto horizontal plane orthogonal to v_cam (skip on first iter)
+        # Project u_guess onto horizontal plane orthogonal to v_cam (skip on first iter)
         if k == 0:
             u_dir = u_guess
         else:
@@ -268,44 +219,34 @@ def refine_pose_iterative(points_img, AB_dist, CD_dist, phi_rad, theta0, vcam0, 
             u_dir = u_guess - np.dot(u_guess, v_cam) * v_cam
             u_dir /= np.linalg.norm(u_dir)
 
-        # 3) Triangulate A/B and C/D in 3D
+        # Triangulate A/B and C/D in 3D
         A3d, B3d = triangulate_pts(points_img['A'], points_img['B'], AB_dist, u_dir)
         C3d, D3d = triangulate_pts(points_img['C'], points_img['D'], CD_dist, u_dir)
-        # # If E/F are provided, triangulate them too
+        # If E/F are provided, triangulate them too
         if 'E' in points_img and 'F' in points_img and EF_dist is not None:
             E3d, F3d = triangulate_pts(points_img['E'], points_img['F'], EF_dist, u_dir)
 
-        """"
-        # 4) Compute back-plane normal
-        n_back = np.cross(B3d - A3d, D3d - C3d)
-        n_back /= np.linalg.norm(n_back)
-        if n_back[2] < 0:
-            n_back = -n_back
-        """
-        
-        # 4) Compute back-plane normal via SVD on all available rear‐side points
+        # Compute back-plane normal via SVD on all available rear‐side points
         pts = [A3d, B3d, C3d, D3d]
         if 'E' in points_img and 'F' in points_img and EF_dist is not None:
             pts += [E3d, F3d]
 
-        pts = np.vstack(pts)           # shape (N,3), N=4 or 6
-        centroid = pts.mean(axis=0)    # baricentro
-        # PCA: l'ultima componente di V^T è la direzione di minore varianza → normale
+        pts = np.vstack(pts)
+        centroid = pts.mean(axis=0)
         _, _, Vt = np.linalg.svd(pts - centroid)
         n_back = Vt[-1]                
         n_back /= np.linalg.norm(n_back)
-        # facoltativo: assicura che punti verso la camera
         if n_back[2] < 0:
             n_back = -n_back
 
-        # 5) Compute camera vertical via Rodrigues rotation
+        # Compute camera vertical via Rodrigues rotation
         v_cam = compute_camera_vertical(n_back, u_dir, phi_rad)
 
-        # 6) Update vanishing point and horizon line
+        # Update vanishing point and horizon line
         Vz_h = K @ v_cam
         l_inf = K_inv.T @ v_cam
 
-        # 7) Project A',B',C',D' to horizon
+        # Project A', B', C', D' to horizon
         Ah2 = project_to_horizon(points_img['A'], Vz_h, l_inf)
         Bh2 = project_to_horizon(points_img['B'], Vz_h, l_inf)
         Ch2 = project_to_horizon(points_img['C'], Vz_h, l_inf)
@@ -323,7 +264,7 @@ def refine_pose_iterative(points_img, AB_dist, CD_dist, phi_rad, theta0, vcam0, 
             E2 = Eh2[:2] / Eh2[2]
             F2 = Fh2[:2] / Fh2[2]
 
-        # 8) compute unit‐vectors for AB and CD
+        # compute unit‐vectors for AB and CD
         th_AB = np.arctan2(B2[1]-A2[1], B2[0]-A2[0])
         th_CD = np.arctan2(D2[1]-C2[1], D2[0]-C2[0])
         if 'E' in points_img and 'F' in points_img and EF_dist is not None:
@@ -332,12 +273,12 @@ def refine_pose_iterative(points_img, AB_dist, CD_dist, phi_rad, theta0, vcam0, 
         else:
             angles = np.array([th_AB, th_CD])
 
-        # 9) circular mean
+        # circular mean
         vecs = np.exp(1j * angles)
         mean_vec = vecs.mean()
         theta_mean = np.arctan2(mean_vec.imag, mean_vec.real)
 
-        # 10) signed difference & damping
+        # signed difference & damping
         delta = (theta_mean - theta + np.pi) % (2*np.pi) - np.pi
 
         # adaptive damping
@@ -354,7 +295,7 @@ def refine_pose_iterative(points_img, AB_dist, CD_dist, phi_rad, theta0, vcam0, 
         
         print(f"Iter {k+1}: θ = {np.degrees(theta):.4f} deg, Δθ = {np.degrees(delta):.4f} deg")
         
-        # 11) convergence on |delta|
+        # convergence on |delta|
         if abs(delta) < tol:
             break
         
@@ -369,27 +310,24 @@ K = np.array([
 ], dtype=np.float64)
 K_inv = np.linalg.inv(K)
 
-# Coefficienti di distorsione
 dist = np.array([[0.24377, -1.5955, -0.0011528, 0.00041986, 3.5668]], dtype=np.float64)
 
 phi_rad = np.arctan2(0.15, 0.90) # 0.9 m è l'altezza del faro dal suolo, 0.15 m è la distanza orizzontale dal faro post al retro del veicolo
 phi_deg = np.degrees(phi_rad)
 print(f"phi = {phi_deg:.2f}°")
 
-distAB = 0.86 # distanza reale tra A e B in metri
-distCD = 0.52 # distanza reale tra C e D in metri
-distEF = 1.40 # distanza reale tra E e F in metri (se disponibili)
-# distEF = None  # se non si usano le luci posteriori esterne, impostare a None
+distAB = 0.86 # real distance between A e B in meters
+distCD = 0.52 # real distance between C e D in meters
+distEF = 1.40 # # real distance between E e F in meters (if available)
+# distEF = None  # if I don't use the external taillight set None
 
-# Carica immagine
+# load image
 img = cv.imread(os.path.join(os.getcwd(), "Code", "OutputFolder2", "frame_02.png"))
 if img is None:
     raise FileNotFoundError("Immagine non trovata")
 
-# Undistorci l'immagine
 img_undist = cv.undistort(img, K, dist)
 
-# punti delle luci posteriori
 luce_pts = [
     [408, 2268],  # sx interno
     [1256, 2304], # dx interno
@@ -403,7 +341,6 @@ for pt in luce_pts:
 A, B, E, F = luce_pts_undist[0], luce_pts_undist[1], luce_pts_undist[2], luce_pts_undist[3]
 A_h, B_h, E_h, F_h = np.array([A[0], A[1], 1]), np.array([B[0], B[1], 1]), np.array([E[0], E[1], 1]), np.array([F[0], F[1], 1])
 
-# punti della targa
 targa_pts = [
     [600, 2320],  # sx inferiore
     [1004, 2336]  # dx inferiore
@@ -417,7 +354,7 @@ C_h, D_h = np.array([C[0], C[1], 1]), np.array([D[0], D[1], 1])
 
 draw_points(img_undist, A, B, E, F, C, D)
 
-# calcola la linea tra A e B
+# compute line between A and B
 line_AB = np.cross(A_h, B_h)
 # convert to pixel coordinates
 A_pp = (A_h[:2] / A_h[2]).astype(int)
@@ -425,7 +362,7 @@ B_pp = (B_h[:2] / B_h[2]).astype(int)
 # draw the line AB
 cv.line(img_undist, (A_pp[0], A_pp[1]), (B_pp[0], B_pp[1]), (0, 255, 0), 10)
 
-# calcola la linea tra C e D
+# compute line between C and D
 line_CD = np.cross(C_h, D_h)
 # convert to pixel coordinates
 C_pp = (C_h[:2] / C_h[2]).astype(int)
@@ -446,7 +383,6 @@ C_3d, D_3d = triangulate_pts(C_h, D_h, distCD, u_AB)
 
 n_back = np.cross(B_3d - A_3d, D_3d - C_3d)
 n_back /= np.linalg.norm(n_back)
-# Verifica che la normale punti verso la camera (z > 0 tipicamente)
 if n_back[2] < 0:
     n_back = -n_back
 
@@ -480,7 +416,7 @@ if distEF is not None:
 print(f"Normale piano: {n_back_ref}")
 print(f"Verticale camera: {v_cam_ref}")
 
-# width, length, height in meters (your vehicle dims)
+# car's width, length, height in meters
 width_m  = 1.732
 length_m = 3.997
 height_m = 1.467
@@ -491,3 +427,5 @@ resized_img = cv.resize(img_undist, (0, 0), fx=0.25, fy=0.25)
 cv.imshow("Immagine Undistorta", resized_img)
 cv.waitKey(0)
 cv.destroyAllWindows()
+
+cv.imwrite(os.path.join(os.getcwd(), "Code", "OutputFolder2", "frame_02_bb_3.png"), img_undist)

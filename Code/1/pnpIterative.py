@@ -128,5 +128,6 @@ for i in range(4):
     cv2.line(img_ud, tuple(box2d[i]), tuple(box2d[i+4]), (0, 0, 255), 5)
 
 cv2.imshow("box", cv2.resize(img_ud, None, fx=0.35, fy=0.35))
+cv2.imwrite(os.path.join(os.getcwd(), "Code", "1", "bbox_5pts_iterative.png"), img_ud)
 cv2.waitKey(0)
 cv2.destroyAllWindows()

@@ -1,7 +1,10 @@
-import cv2,  numpy as np
+import cv2
+import numpy as np
+import os
 
 # ---------- 0. immagine e intrinseche ---------------------------------
-img = cv2.imread("outputFolder/frame_08.png")
+img_path = os.path.join(os.getcwd(), "Code", "outputFolder2", "frame_08.png")
+img = cv2.imread(img_path)
 if img is None:
     raise FileNotFoundError("frame non trovato")
 
@@ -79,7 +82,7 @@ obj_full = np.array([
     [-0.340, 0.100, Z_FARO], # faro L
     [PLATE_W + 0.340, 0.100, Z_FARO], # faro R
     # [-0.7, 0.150, -2.050 + 0.3] # front speechietto L
-    [-0.7+1.958, 0.150, -2.050 + 0.3] # front speechietto R
+    # [-0.7+1.958, 0.150, -2.050 + 0.3] # front speechietto R
 ], dtype=np.float32)
 
 pix_full = np.array([
@@ -89,13 +92,14 @@ pix_full = np.array([
     [1432, 1712], # P3 = plate BR
     [1036, 1592], # P4 = rear-light L 
     [1612, 1608], # P5 = rear-light R
-    [1928, 1340] # specchio R
+    # [1928, 1340] # specchio R
 ], dtype=np.float32)
 
 # pixel matching obj_full
 uv_full = cv2.undistortPoints(pix_full.reshape(-1, 1, 2), K, dist, P=K).reshape(-1, 2)
 
-success, rvec, tvec = cv2.solvePnP(obj_full, uv_full, K, None, rvec=rvec0, tvec=tvec0, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_ITERATIVE)
+# success, rvec, tvec = cv2.solvePnP(obj_full, uv_full, K, None, rvec=rvec0, tvec=tvec0, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_ITERATIVE)
+success, rvec, tvec = cv2.solvePnP(obj_full, uv_full, K, None, rvec=rvec0, tvec=tvec0, useExtrinsicGuess=False, flags=cv2.SOLVEPNP_EPNP)
 rvec, tvec = cv2.solvePnPRefineLM(obj_full, uv_full, K, None, rvec, tvec)
 
 # ---------- 8. bounding-box nel frame plate-TL ------------------------
@@ -128,5 +132,6 @@ for i in range(4):
     cv2.line(img_ud, tuple(box2d[i]), tuple(box2d[i+4]), (0, 0, 255), 5)
 
 cv2.imshow("box", cv2.resize(img_ud, None, fx=0.35, fy=0.35))
+cv2.imwrite(os.path.join(os.getcwd(), "Code", "1", "bbox_4pts_epnp.png"), img_ud)
 cv2.waitKey(0)
 cv2.destroyAllWindows()

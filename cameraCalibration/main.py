@@ -63,7 +63,7 @@ def calibrate_camera(image_paths, board_size=(9, 6), square_size=1.0):
     return ret, camera_matrix, dist_coeffs, rvecs, tvecs
 
 if __name__ == '__main__':
-    path_images = os.path.join(os.getcwd(), 'cameraCalibration', 'checkboard_3')
+    path_images = os.path.join(os.getcwd(), 'cameraCalibration', 'frames')
     cols = 8
     rows = 6
     square_size = 24.5  # Size of one square in mm

@@ -91,10 +91,6 @@ See `LICENSE` for details.
 
 ---
 
-Ecco la versione aggiornata del `README.md` con l'aggiunta della sezione dedicata alla collaborazione:
-
----
-
 ## 👥 Authors & Contributors
 
 This project was developed as part of the **Image Analysis and Computer Vision** course at Politecnico di Milano.
@@ -102,4 +98,5 @@ It has been created in collaboration by:
 
 * [@alessiovilla](https://github.com/alessiovilla)
 * [@beazani](https://github.com/beazani)
+
 ---

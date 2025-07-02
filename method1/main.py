@@ -176,6 +176,6 @@ print("origin (3D):", origin)
 print("Rotation matrix (R):", R)
 
 cv2.imshow("Combined 3D Box", cv2.resize(img_final, None, fx=0.35, fy=0.35))
-cv2.imwrite(os.path.join(os.getcwd(), "method1", "results", "bbox.png"), img_final)
+cv2.imwrite(os.path.join(os.getcwd(), "method1", "results", "bbox.jpg"), img_final)
 cv2.waitKey(0)
 cv2.destroyAllWindows()

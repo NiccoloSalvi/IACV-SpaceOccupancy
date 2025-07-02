@@ -192,14 +192,14 @@ K = np.array([
 dist = np.array([[0.24377, -1.5955, -0.0011528, 0.00041986, 3.5668]], dtype=np.float64)
 
 # Carica immagine
-img = cv2.imread(os.path.join(os.getcwd(), "Code", "1", "sunnyFrame.png"))
+img = cv2.imread(os.path.join(os.getcwd(), "method1", "sunnyFrame.png"))
 if img is None:
     raise FileNotFoundError("Immagine non trovata")
 
 # Undistorci l'immagine
 img_undist = cv2.undistort(img, K, dist)
 
-# Punti nell'immagine (usa i tuoi punti corretti)
+# Punti nell'immagine
 points_img = np.array([
     [1020, 1804],  # P0 = plate TL
     [1324, 1780],  # P1 = plate TR

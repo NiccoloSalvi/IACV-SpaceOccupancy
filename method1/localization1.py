@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
+import os
 
 # draws bounding box around the car given the 2d points
 def draw_box(ax, pts2d, color='lime'):
@@ -36,12 +37,12 @@ K = np.array([
     [0.0, 0.0, 1.0]
 ], dtype=np.float32)
 
-# Coordinate immagine: targa TL, TR e fanali L, R
+# Punti nell'immagine
 pix = np.array([
-    [422, 752],  # P0 = plate TL  (origine)
-    [549, 743],  # P1 = plate TR
-    [328, 733],  # P2 = rear-light L
-    [618, 710]  # P3 = rear-light R
+    [1020, 1804],  # P0 = plate TL
+    [1324, 1780],  # P1 = plate TR
+    [792, 1768],   # P2 = rear-light L
+    [1484, 1708]   # P3 = rear-light R
 ], dtype=np.float64)
 
 
@@ -122,7 +123,7 @@ corners_2D = [(pt[0]/pt[2], pt[1]/pt[2]) for pt in corners_2D]
 
 # Draw 3D bounding box
 # prepare plot with frame1
-img = cv2.imread("dayImg.jpeg")
+img = cv2.imread(os.path.join(os.getcwd(), "method1", "sunnyFrame.png"))
 fig, ax = plt.subplots()
 ax.imshow(img)
 

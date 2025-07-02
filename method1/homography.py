@@ -372,7 +372,7 @@ CAR_H = 1.467
 CAR_D = 3.997
 
 if __name__ == "__main__":
-    frame = cv2.imread(os.path.join(os.getcwd(), "Code", "1", "sunnyFrame.png"))
+    frame = cv2.imread(os.path.join(os.getcwd(), "method1", "sunnyFrame.png"))
     if frame is None:
         raise FileNotFoundError("frame non trovato")
     

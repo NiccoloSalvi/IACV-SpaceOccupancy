@@ -95,7 +95,20 @@ def detect_red_lights(image, min_area=3):
             boxes.append((inner_x, inner_y, inner_w, inner_h))
 
     boxes = sorted(boxes, key=lambda b: b[0])
+    boxes = [list(b) for b in boxes]
 
+
+    centers_y = [(b[1] + b[3]//2) for b in boxes]
+    avg_center_y = int(sum(centers_y) / len(centers_y))
+
+
+
+    # Adjust y so both boxes center vertically at avg_center_y
+    for b in boxes:
+        _, _, w, h = b
+        b[1] = avg_center_y - h // 2  # New y
+
+    
     for idx, (x, y, w, h) in enumerate(boxes):
         # get outer edge center
         if idx == 0:
@@ -116,18 +129,20 @@ def detect_red_lights(image, min_area=3):
         cy = y + h
         red_lights_lower.append((cx, cy))
 
-    return red_lights_lower, red_lights, boxes
+    return red_lights_lower, red_lights, boxes, red_mask
 
 
 def detect_license_plate(image, lights, min_plate_area=200):
 
     (lx, ly), (rx, ry) = lights[0], lights[-1]
 
+    lx, ly = int(lx), int(ly)
+    rx, ry = int(rx), int(ry)
+
     dx, dy = rx - lx, ry - ly
     angle = np.degrees(np.arctan2(dy, dx))
 
-    # calculate rotation center
-    center = ((lx + rx) // 2, (ly + ry) // 2)
+    center = (int((lx + rx) / 2), int((ly + ry) / 2))
 
     # get rotation matrix and rotate image
     rot_matrix = cv2.getRotationMatrix2D(center, -angle, 1.0)
@@ -142,11 +157,15 @@ def detect_license_plate(image, lights, min_plate_area=200):
     new_rx, new_ry = rotate_point(rx, ry, rot_matrix)
 
     # Define ROI in rotated image
-    roi_margin = 20
-    roi_top = min(new_ly, new_ry) - 10
-    roi_bottom = max(new_ly, new_ry) + 60
-    roi_left = new_lx - roi_margin
-    roi_right = new_rx + roi_margin
+
+
+    roi_margin_x = 40
+    roi_margin_top = 40
+    roi_margin_bottom = 90
+    roi_top = min(new_ly, new_ry) - roi_margin_top
+    roi_bottom = max(new_ly, new_ry) + roi_margin_bottom
+    roi_left = new_lx - roi_margin_x
+    roi_right = new_rx + roi_margin_x
 
     h, w = rotated_image.shape[:2]
     roi_left = max(0, roi_left)
@@ -174,6 +193,7 @@ def detect_license_plate(image, lights, min_plate_area=200):
     # Clean the mask
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
     plate_mask = cv2.morphologyEx(plate_mask, cv2.MORPH_CLOSE, kernel)
+
     contours, _ = cv2.findContours(plate_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     best_plate = None
@@ -191,7 +211,7 @@ def detect_license_plate(image, lights, min_plate_area=200):
                 best_score = score
                 best_plate = (x + roi_left, y + roi_top, w_box, h_box)
 
-    return best_plate
+    return best_plate, plate_mask
 
 def project_3d(K, points):
     homo_coords = np.array([points[0], points[1], 1.0])
@@ -213,8 +233,8 @@ def process_frames(frame1_path, frame2_path):
     yolo_frame1 = yolo_detection(frame1)
     yolo_frame2 = yolo_detection(frame2)
 
-    lights1, lights1_center, box1 = detect_red_lights(yolo_frame1)
-    lights2, lights2_center, box2 = detect_red_lights(yolo_frame2)
+    lights1, lights1_center, box1, red_mask1 = detect_red_lights(yolo_frame1)
+    lights2, lights2_center, box2, red_mask2 = detect_red_lights(yolo_frame2)
 
     # draw detections
     for pt in lights1:
@@ -240,8 +260,12 @@ def process_frames(frame1_path, frame2_path):
     cv2.imshow("Frame 1", resized_frame1)
     cv2.imshow("Frame 2", resized_frame2)
 
-    frame = cv2.imread("OutputFolder/frame_11.png")
-    plate_box = detect_license_plate(frame, lights2_center)
+    cv2.imshow("Red mask frame 1", red_mask1)
+    cv2.imshow("Red mask frame 2", red_mask2)
+
+
+    frame = cv2.imread(frame2_path)
+    plate_box, plate_mask = detect_license_plate(frame, lights2_center)
 
     if plate_box:
         x, y, w, h = plate_box
@@ -255,6 +279,7 @@ def process_frames(frame1_path, frame2_path):
 
     resized_frame = cv2.resize(frame, (frame.shape[1] // 4, frame.shape[0] // 4), interpolation=cv2.INTER_AREA)
     cv2.imshow("License Plate Detection", resized_frame)
+    cv2.imshow("License Plate Mask", plate_mask)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
@@ -268,7 +293,7 @@ def process_frames(frame1_path, frame2_path):
     return L1, R1, L2, R2, TL, TR, BL, BR
 
 if __name__ == "__main__":
-    frame1_path = "OutputFolder/frame_02.png"
-    frame2_path = "OutputFolder/frame_11.png"
+    frame1_path = "featureExtraction/extractedFrames/frame_02.png"
+    frame2_path = "featureExtraction/extractedFrames/frame_11.png"
 
     L1, R1, L2, R2, TL, TR, BL, BR = process_frames(frame1_path, frame2_path)

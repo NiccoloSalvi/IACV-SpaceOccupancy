@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-def yolo_detection(image, cfg_path="yolo/yolov4.cfg", weights_path="yolo/yolov4.weights", names_path="yolo/coco.names", confidence_threshold=0.27):
+def yolo_detection(image, cfg_path="featureExtraction/yolo/yolov4.cfg", weights_path="featureExtraction/yolo/yolov4.weights", names_path="featureExtraction/yolo/coco.names", confidence_threshold=0.27):
     # Load the classes
     with open(names_path, "r") as f:
         classes = [line.strip() for line in f.readlines()]
@@ -50,11 +50,6 @@ def yolo_detection(image, cfg_path="yolo/yolov4.cfg", weights_path="yolo/yolov4.
                 cut_image[y:y+h, 0:int(x-w*0.05)] = 0 # On the left of the bounding box
                 cut_image[y:y+h, int(x+w*1.05):width] = 0 # On the right of the bounding box
     # Save the image
-    show_image = cut_image.copy()
-    show_image = cv2.resize(show_image, (show_image.shape[1] // 4, show_image.shape[0] // 4), interpolation=cv2.INTER_AREA)
-    cv2.imshow("Cut Image", show_image)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
     return cut_image
 
 
@@ -148,7 +143,7 @@ def detect_license_plate(image, lights, min_plate_area=200):
 
     # Define ROI in rotated image
     roi_margin = 20
-    roi_top = min(new_ly, new_ry) - 10
+    roi_top = min(new_ly, new_ry) - 200
     roi_bottom = max(new_ly, new_ry) + 60
     roi_left = new_lx - roi_margin
     roi_right = new_rx + roi_margin
@@ -157,10 +152,12 @@ def detect_license_plate(image, lights, min_plate_area=200):
     roi_left = max(0, roi_left)
     roi_right = min(w, roi_right)
     roi_top = max(0, roi_top)
+    print("ROI TOP:", roi_top)
     roi_bottom = min(h, roi_bottom)
 
     roi = rotated_image[roi_top:roi_bottom, roi_left:roi_right]
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+    cv2.imshow("ROI", roi)
 
     # white mask for white parts of the plate
     lower_white = np.array([0, 0, 200])
@@ -211,63 +208,69 @@ def to_line(p1, p2):
 def to_homogeneous(p):
     return np.array([p[0], p[1], 1.0])
 
-frame1 = cv2.imread("OutputFolder/frame_02.png")
-frame2 = cv2.imread("OutputFolder/frame_11.png")
+def process_frames(frame1_path, frame2_path):
+    frame1 = cv2.imread(frame1_path)
+    frame2 = cv2.imread(frame2_path)
 
-yolo_frame1 = yolo_detection(frame1)
-yolo_frame2 = yolo_detection(frame2)
+    yolo_frame1 = yolo_detection(frame1)
+    yolo_frame2 = yolo_detection(frame2)
 
-lights1, lights1_center, box1 = detect_red_lights(yolo_frame1)
-lights2, lights2_center, box2 = detect_red_lights(yolo_frame2)
+    lights1, lights1_center, box1 = detect_red_lights(yolo_frame1)
+    lights2, lights2_center, box2 = detect_red_lights(yolo_frame2)
 
-# draw detections
-for pt in lights1:
-    cv2.circle(frame1, pt, 10, (0, 255, 0), -1)
-    #cv2.putText(frame1, f"{pt}", (pt[0]+6, pt[1]-6), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1)
+    # draw detections
+    for pt in lights1:
+        cv2.circle(frame1, pt, 10, (0, 255, 0), -1)
 
-for pt in lights2:
-    cv2.circle(frame2, pt, 10, (0, 255, 0), -1)
-    cv2.putText(frame2, f"{pt}", (pt[0]+6, pt[1]-6), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1)
+    for pt in lights2:
+        cv2.circle(frame2, pt, 10, (0, 255, 0), -1)
+        cv2.putText(frame2, f"{pt}", (pt[0]+6, pt[1]-6), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1)
 
-L1, R1 = lights1[0], lights1[1]
-cv2.line(frame1, L1, R1, (255, 0, 0), 5)
+    L1, R1 = lights1[0], lights1[1]
+    L2, R2 = lights2[0], lights2[1]
 
-L2, R2 = lights2[0], lights2[1]
-cv2.line(frame2, L2, R2, (255, 0, 0), 5)
+    cv2.line(frame1, L1, R1, (255, 0, 0), 5)
+    cv2.line(frame2, L2, R2, (255, 0, 0), 5)
 
-print(f'L1:{L1}')
-print(f'R1:{R1}')
-print(f'L2:{L2}')
-print(f'R2:{R2}')
+    print(f'L1:{L1}')
+    print(f'R1:{R1}')
+    print(f'L2:{L2}')
+    print(f'R2:{R2}')
 
+    resized_frame1 = cv2.resize(frame1, (frame1.shape[1] // 4, frame1.shape[0] // 4), interpolation=cv2.INTER_AREA)
+    resized_frame2 = cv2.resize(frame2, (frame2.shape[1] // 4, frame2.shape[0] // 4), interpolation=cv2.INTER_AREA)
+    cv2.imshow("Frame 1", resized_frame1)
+    cv2.imshow("Frame 2", resized_frame2)
 
-#frame1 = cv2.resize(frame1, (frame1.shape[1] // 4, frame1.shape[0] // 4), interpolation=cv2.INTER_AREA)
-#frame2 = cv2.resize(frame2, (frame2.shape[1] // 4, frame2.shape[0] // 4), interpolation=cv2.INTER_AREA)
+    frame = cv2.imread("OutputFolder/frame_11.png")
+    plate_box = detect_license_plate(frame, lights2_center)
 
-cv2.imshow("Frame 1", frame1)
-cv2.imshow("Frame 2", frame2)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+    if plate_box:
+        x, y, w, h = plate_box
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 255), 5)
+        TL = (x, y)
+        TR = (x + w, y)
+        BL = (x, y + h)
+        BR = (x + w, y + h)
+    else:
+        print("No license plate detected")
 
-frame = cv2.imread("OutputFolder/frame_11.png")
-plate_box = detect_license_plate(frame, lights2_center)
+    resized_frame = cv2.resize(frame, (frame.shape[1] // 4, frame.shape[0] // 4), interpolation=cv2.INTER_AREA)
+    cv2.imshow("License Plate Detection", resized_frame)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
-if plate_box:
-    x, y, w, h = plate_box
-    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 255), 5)
-    #print(f"License Plate Box: {plate_box}")
-    #cv2.putText(frame, "License Plate", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-else:
-    print("No license plate detected")
+    # Camera intrinsics
+    K = np.array([
+        [3298, 0, 1908],
+        [0, 3302, 1071],
+        [0, 0, 1]
+    ], dtype=np.float64)
 
-#frame = cv2.resize(frame, (frame.shape[1] // 4, frame.shape[0] // 4), interpolation=cv2.INTER_AREA)
-cv2.imshow("Frame with Plate", frame)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+    return L1, R1, L2, R2, TL, TR, BL, BR
 
-# Camera intrinsics
-K = np.array([
-    [3298, 0, 1908],
-    [0, 3302, 1071],
-    [0, 0, 1]
-], dtype=np.float64)
+if __name__ == "__main__":
+    frame1_path = "OutputFolder/frame_02.png"
+    frame2_path = "OutputFolder/frame_11.png"
+
+    L1, R1, L2, R2, TL, TR, BL, BR = process_frames(frame1_path, frame2_path)

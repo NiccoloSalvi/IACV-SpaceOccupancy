@@ -1,6 +1,10 @@
 import numpy as np
 import cv2 as cv
 import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'featureExtraction')))
+from extractLights2 import process_frames
+from clusterRedLights import lights_internal
 
 def draw_points(img, A, B, E, F, C, D, color=(0, 255, 0)):
     A, B, E, F, C, D = map(lambda p: np.round(p).astype(int), [A, B, E, F, C, D])
@@ -279,17 +283,20 @@ distEF = 1.40 # # real distance between E e F in meters (if available)
 # distEF = None  # if I don't use the external taillight set None
 
 # load image
-img = cv.imread(os.path.join(os.getcwd(), "featureExtraction", "extractedFrames", "frame_02.png"))
+img = cv.imread(os.path.join(os.getcwd(), "featureExtraction", "extractedFrames", "frame_11.png"))
 if img is None:
     raise FileNotFoundError("Immagine non trovata")
 
 img_undist = cv.undistort(img, K, dist)
 
+# Extract points from the image
+A, B = lights_internal("featureExtraction/extractedFrames/frame_11.png")
+_, _, E, F, _, _, C, D = process_frames("featureExtraction/extractedFrames/frame_02.png", "featureExtraction/extractedFrames/frame_11.png")
 luce_pts = [
-    [408, 2268],  # sx interno
-    [1256, 2304], # dx interno
-    [318, 2212],  # sx esterno
-    [1456, 2255]  # dx esterno
+    A,  # sx interno
+    B, # dx interno
+    E,  # sx esterno
+    F  # dx esterno
 ]
 luce_pts_undist = []
 for pt in luce_pts:
@@ -299,8 +306,8 @@ A, B, E, F = luce_pts_undist[0], luce_pts_undist[1], luce_pts_undist[2], luce_pt
 A_h, B_h, E_h, F_h = np.array([A[0], A[1], 1]), np.array([B[0], B[1], 1]), np.array([E[0], E[1], 1]), np.array([F[0], F[1], 1])
 
 targa_pts = [
-    [600, 2320],  # sx inferiore
-    [1004, 2336]  # dx inferiore
+    C,  # sx inferiore
+    D  # dx inferiore
 ]
 targa_pts_undist = []
 for pt in targa_pts:

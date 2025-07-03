@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
 
-def yolo_detection(image, cfg_path="yolo/yolov4.cfg", weights_path="yolo/yolov4.weights", names_path="yolo/coco.names", confidence_threshold=0.27):
+def yolo_detection(image, cfg_path="featureExtraction/yolo/yolov4.cfg", weights_path="featureExtraction/yolo/yolov4.weights", names_path="featureExtraction/yolo/coco.names", confidence_threshold=0.27):
     # Load the classes
     with open(names_path, "r") as f:
         classes = [line.strip() for line in f.readlines()]
@@ -72,20 +72,31 @@ def detect_red_lights(image):
     pixel_coords = np.column_stack((x_coords, y_coords))
     
     if len(pixel_coords) > 0:
-        # Apply DBSCAN clustering to group different red light sources
         clustering = DBSCAN(eps=20, min_samples=5).fit(pixel_coords)
         labels = clustering.labels_
-        
-        unique_labels = set(labels)
-        red_centers = []
-        
+        unique_labels = [label for label in set(labels) if label != -1]
+
+        if len(unique_labels) < 2:
+            print("Less than two clusters detected")
+            return []
+
+        # Sort clusters from left to right based on mean X
+        cluster_means = []
         for label in unique_labels:
-            if label == -1:
-                continue  # Ignore noise points
-            cluster_points = pixel_coords[labels == label]
-            mean_x = int(np.mean(cluster_points[:, 0]))
-            mean_y = int(np.mean(cluster_points[:, 1]))
-            red_centers.append((mean_x, mean_y))
+            cluster = pixel_coords[labels == label]
+            cluster_means.append((label, np.mean(cluster[:, 0])))
+
+        sorted_clusters = sorted(cluster_means, key=lambda x: x[1])
+        left_cluster = pixel_coords[labels == sorted_clusters[0][0]]
+        right_cluster = pixel_coords[labels == sorted_clusters[1][0]]
+
+        # From the left cluster: get the point with the largest X (rightmost point in that cluster)
+        left_internal = tuple(left_cluster[np.argmax(left_cluster[:, 0])])
+
+        # From the right cluster: get the point with the smallest X (leftmost point in that cluster)
+        right_internal = tuple(right_cluster[np.argmin(right_cluster[:, 0])])
+
+        red_centers = [left_internal, right_internal]
     else:
         red_centers = []
         print("No red pixels detected")
@@ -94,7 +105,7 @@ def detect_red_lights(image):
     red_detected = cv2.bitwise_and(image, image, mask=red_mask)
     
     for center in red_centers:
-        cv2.circle(red_detected, center, 5, (0, 255, 0), -1)
+        cv2.circle(red_detected, center, 10, (0, 255, 0), -1)
     
     red_detected = cv2.resize(red_detected, (red_detected.shape[1] // 4, red_detected.shape[0] // 4), interpolation=cv2.INTER_AREA)
     cv2.imshow('Detected Red Pixels', red_detected)
@@ -104,74 +115,28 @@ def detect_red_lights(image):
     return red_centers
 
 
+def lights_internal(image):
 
-frame1 = cv2.imread("outputFolder/frame_02.png")
-frame2 = cv2.imread("outputFolder/frame_10.png")
+    frame1 = cv2.imread(image)
 
-yolo_frame1 = yolo_detection(frame1)
-yolo_frame2 = yolo_detection(frame2)
+    yolo_frame1 = yolo_detection(frame1)
 
-lights1 = detect_red_lights(yolo_frame1)
-lights2 = detect_red_lights(yolo_frame2)
+    lights = detect_red_lights(yolo_frame1)
 
-print("Lights 2:", lights2)
-#print original image with red lights
-for light in lights1:
-    cv2.circle(frame1, light, 5, (0, 255, 0), -1)
+    print("Lights :", lights)
+    #print original image with red lights
+    for light in lights:
+        cv2.circle(frame1, light, 15, (0, 255, 0), -1)
 
-#print line that connects the two red lights
-L1, R1 = lights1[0], lights1[1]
-cv2.line(frame1, L1, R1, (255, 0, 0), 5)
+    cv2.line(frame1, lights[0], lights[1], (255, 0, 0), 5)
 
-for light in lights2:
-    cv2.circle(frame2, light, 5, (0, 255, 0), -1)
+    frame1 = cv2.resize(frame1, (frame1.shape[1] // 4, frame1.shape[0] // 4), interpolation=cv2.INTER_AREA)
 
-L2, R2 = lights2[1], lights2[0]
-cv2.line(frame2, L2, R2, (255, 0, 0), 5)
+    cv2.imshow("Frame 1", frame1)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
-def to_homogeneous(point):
-    """Convert a 2D point to homogeneous coordinates."""
-    return np.array([point[0], point[1], 1])
+    return lights[0], lights[1]  # Return the internal points of the left and right lights
 
-h = np.cross(to_homogeneous(L1), to_homogeneous(R1))
-k = np.cross(to_homogeneous(L2), to_homogeneous(R2))
-
-line_Y1 = np.cross(to_homogeneous(L1), to_homogeneous(L2))
-line_Y2 = np.cross(to_homogeneous(R1), to_homogeneous(R2))
-
-cv2.line(frame1, L1, L2, (0, 255, 0), 5)
-cv2.line(frame1, R1, R2, (0, 255, 0), 5)
-cv2.line(frame2, L1, L2, (0, 255, 0), 5)
-cv2.line(frame2, R1, R2, (0, 255, 0), 5)
-Vx = np.cross(k, h)
-Vy = np.cross(line_Y1, line_Y2)
-cv2.circle(frame1, (int(Vx[0]), int(Vx[1])), 5, (255, 0, 0), -1)
-cv2.circle(frame2, (int(Vy[0]), int(Vy[1])), 5, (255, 0, 0), -1)
-
-lineInfinity = np.cross(Vx, Vy)
-print("Line at infinity:", lineInfinity)
-
-# compute K-1 Vx
-K = np.array([
-    [2805.4324, 0, 1919.5735],
-    [0, 2805.4324, 1077.1753],
-    [0, 0, 1]
-], dtype=np.float32)
-
-K_inv = np.linalg.inv(K)
-K_inv_Vx = K_inv @ Vx
-K_inv_Vy = K_inv @ Vy
-print("K-1 Vy:", K_inv_Vy)
-print("K-1 Vx:", K_inv_Vx)
-
-# check if the points are in the same direction
-check = np.cross(K_inv_Vx, K_inv_Vy)
-print("Check:", check)
-
-frame1 = cv2.resize(frame1, (frame1.shape[1] // 4, frame1.shape[0] // 4), interpolation=cv2.INTER_AREA)
-frame2 = cv2.resize(frame2, (frame2.shape[1] // 4, frame2.shape[0] // 4), interpolation=cv2.INTER_AREA)
-
-cv2.imshow("Frame 1", frame1)
-cv2.imshow("Frame 2", frame2)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+if __name__ == "__main__":
+    lights_internal("outputFolder/frame_02.png")

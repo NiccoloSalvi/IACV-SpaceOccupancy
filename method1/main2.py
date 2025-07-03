@@ -2,6 +2,9 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'featureExtraction')))
+from extractLights2 import process_frames
 
 # draws bounding box around the car given the 2d points
 def draw_box(ax, pts2d, color='lime'):
@@ -29,7 +32,7 @@ car_length = 3.997
 car_height = 1.467
 taillight_height = 0.930
 
-img_path = os.path.join(os.getcwd(), "featureExtraction", "extractedFrames", "frame_08.png")
+img_path = os.path.join(os.getcwd(), "featureExtraction", "extractedFrames", "frame_11.png")
 img = cv2.imread(img_path)
 if img is None:
     raise FileNotFoundError("frame non trovato")
@@ -44,11 +47,25 @@ dist = np.array([[2.65104301e-01, -1.78436004e+00,  2.42978100e-03,  1.18030874e
 
 img_ud = cv2.undistort(img, K, dist)
 
+# ========= Inputs ========= #
+# Input points (taillights)
+L1, R1, L2, R2, TL, TR, _, _ = process_frames("featureExtraction/extractedFrames/frame_02.png", "featureExtraction/extractedFrames/frame_11.png")
+
+print("Pixel rilevati:")
+print("Frame 1 - Sinistra:", L1)
+print("Frame 1 - Destra:", R1)
+print("Frame 2 - Sinistra:", L2)
+print("Frame 2 - Destra:", R2)
+
+lights1 = [L1, R1]
+lights2 = [L2, R2]
+
+# ---------- 1. pixel (undistorti) dei 4 punti sullo stesso piano ------
 pix_ud = np.array([
-    [1192, 1648], # P0 = plate TL  (origine)
-    [1448, 1656], # P1 = plate TR
-    [1036, 1592], # P2 = rear-light L
-    [1612, 1608] # P3 = rear-light R
+    TL, # P0 = plate TL  (origine)
+    TR, # P1 = plate TR
+    L2, # P2 = rear-light L
+    R2  # P3 = rear-light R
 ], dtype=np.float64)
 
 pix = cv2.undistortPoints(pix_ud.reshape(-1,1,2), K, dist, P=K).reshape(-1,2)

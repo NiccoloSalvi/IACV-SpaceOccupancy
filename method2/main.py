@@ -1,7 +1,11 @@
+import sys
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'featureExtraction')))
+from extractLights2 import process_frames
+
 
 # ========= Useful functions ========= #
 # returns line going through two points
@@ -24,21 +28,26 @@ def draw_box(ax, pts2d, color='lime'):
         y = [pts2d[i][1], pts2d[j][1]]
         ax.plot(x, y, color=color, linewidth=2)
 
-# ========= Inputs ========= #
-# Input points (taillights)
-L1 = [318, 2286]
-R1 = [1452, 2326]
-L2 = [1211, 1504]
-R2 = [1839, 1508]
 
-lights1 = [L1, R1]
-lights2 = [L2, R2]
 
 # Load image frames
 frame1 = cv2.imread(os.path.join(os.getcwd(), "featureExtraction", "extractedFrames", "frame_02.png"))
 frame2 = cv2.imread(os.path.join(os.getcwd(), "featureExtraction", "extractedFrames", "frame_11.png"))
 # frame1 = cv2.imread("OutputFolder/frame_02.png")
 # frame2 = cv2.imread("OutputFolder/frame_11.png")
+
+# ========= Inputs ========= #
+# Input points (taillights)
+L1, R1, L2, R2, _, _, _, _ = process_frames("featureExtraction/extractedFrames/frame_02.png", "featureExtraction/extractedFrames/frame_11.png")
+
+print("Pixel rilevati:")
+print("Frame 1 - Sinistra:", L1)
+print("Frame 1 - Destra:", R1)
+print("Frame 2 - Sinistra:", L2)
+print("Frame 2 - Destra:", R2)
+
+lights1 = [L1, R1]
+lights2 = [L2, R2]
 
 # Camera intrinsics matrix
 K = np.array([

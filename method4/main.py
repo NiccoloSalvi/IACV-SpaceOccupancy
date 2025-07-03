@@ -1,9 +1,13 @@
+import sys
 import numpy as np
 import cv2
 import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'featureExtraction')))
+from extractLights2 import process_frames
+from getMirror import mirror_frame
 
 # ---------- 0. immagine e intrinseche ---------------------------------
-img_path = os.path.join(os.getcwd(), "featureExtraction", "extractedFrames", "frame_08.png")
+img_path = os.path.join(os.getcwd(), "featureExtraction", "extractedFrames", "frame_11.png")
 img = cv2.imread(img_path)
 if img is None:
     raise FileNotFoundError("frame non trovato")
@@ -17,13 +21,27 @@ K = np.array([
 dist = np.array([[2.65104301e-01, -1.78436004e+00,  2.42978100e-03,  1.18030874e-04, 3.77074289e+00]], dtype=np.float64)
 
 img_ud = cv2.undistort(img, K, dist)
+# ========= Inputs ========= #
+# Input points (taillights)
+L1, R1, L2, R2, TL, TR, BL, BR = process_frames("featureExtraction/extractedFrames/frame_02.png", "featureExtraction/extractedFrames/frame_11.png")
+mirror_point = mirror_frame("featureExtraction/extractedFrames/frame_11.png")
+
+print("Pixel rilevati:")
+print("Frame 1 - Sinistra:", L1)
+print("Frame 1 - Destra:", R1)
+print("Frame 2 - Sinistra:", L2)
+print("Frame 2 - Destra:", R2)
+
+lights1 = [L1, R1]
+lights2 = [L2, R2]
+lights_top = [TL, TR]
 
 # ---------- 1. pixel (undistorti) dei 4 punti sullo stesso piano ------
 pix = np.array([
-    [1192, 1648], # P0 = plate TL  (origine)
-    [1448, 1656], # P1 = plate TR
-    [1036, 1592], # P2 = rear-light L
-    [1612, 1608] # P3 = rear-light R
+    [TL[0], TL[1]],  # P0 = plate TL
+    [TR[0], TR[1]],  # P1 = plate TR
+    [L2[0], L2[1]],  # P2 = rear-light L
+    [R2[0], R2[1]],  # P3 = rear-light R
 ], dtype=np.float64)
 
 uv = cv2.undistortPoints(pix.reshape(-1,1,2), K, dist, P=K).reshape(-1,2)
@@ -85,13 +103,13 @@ obj_full = np.array([
 ], dtype=np.float32)
 
 pix_full = np.array([
-    [1192, 1648], # P0 = plate TL  (origine)
-    [1440, 1656], # P1 = plate TR
-    [1180, 1720], # P2 = plate BL
-    [1432, 1712], # P3 = plate BR
-    [1036, 1592], # P4 = rear-light L 
-    [1612, 1608], # P5 = rear-light R
-    [1928, 1340] # side mirror R - uncomment it if you want to use just taillights and license plate
+    [TL[0], TL[1]],  # P0 = plate TL
+    [TR[0], TR[1]],  # P1 = plate TR
+    [BL[0], BL[1]],  # P2 = plate BL
+    [BR[0], BR[1]],  # P3 = plate BR
+    [L2[0], L2[1]],  # P4 = rear-light L
+    [R2[0], R2[1]],  # P5 = rear-light R
+    [mirror_point[0], mirror_point[1]] # P6 = side mirror R - uncomment it if you want to use just taillights and license plate
 ], dtype=np.float32)
 
 # pixel matching obj_full

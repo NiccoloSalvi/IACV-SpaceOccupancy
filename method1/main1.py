@@ -2,6 +2,9 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'featureExtraction')))
+from extractLights2 import process_frames
 
 def to_homogeneous(p):
     return np.array([p[0], p[1], 1.0])
@@ -198,13 +201,27 @@ if img is None:
 # Undistorci l'immagine
 img_undist = cv2.undistort(img, K, dist)
 
+# ========= Inputs ========= #
+# Input points (taillights)
+L1, R1, L2, R2, TL, TR, _, _ = process_frames("featureExtraction/extractedFrames/frame_02.png", "featureExtraction/extractedFrames/frame_11.png")
+
+print("Pixel rilevati:")
+print("Frame 1 - Sinistra:", L1)
+print("Frame 1 - Destra:", R1)
+print("Frame 2 - Sinistra:", L2)
+print("Frame 2 - Destra:", R2)
+
+lights1 = [L1, R1]
+lights2 = [L2, R2]
+
 # ---------- 1. pixel (undistorti) dei 4 punti sullo stesso piano ------
 points_img = np.array([
-    [1192, 1648], # P0 = plate TL  (origine)
-    [1448, 1656], # P1 = plate TR
-    [1036, 1592], # P2 = rear-light L
-    [1612, 1608] # P3 = rear-light R
+    TL, # P0 = plate TL  (origine)
+    TR, # P1 = plate TR
+    L2, # P2 = rear-light L
+    R2  # P3 = rear-light R
 ], dtype=np.float64)
+
 
 # Undistorci i punti
 points_undist = cv2.undistortPoints(points_img.reshape(-1,1,2), K, dist, P=K).reshape(-1,2)

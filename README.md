@@ -1,108 +1,102 @@
-# 🚀 Car Tracking in the Dark
+# 🚗 Car Space Occupancy - IACV Project 2024-25
 
 ## 📌 Overview
-This project focuses on **space occupancy of a moving vehicle** using video analysis from a fixed camera. The system determines the occupied space for each frame, leveraging intrinsic camera parameters and a simplified car model.
 
-## 🎯 Purpose
-The goal of this system is to:
-- Analyze video footage to determine the space occupied by a moving vehicle.
-- Utilize calibration parameters and a simplified car model.
+This project addresses the specific challenge of developing a vision-based system capable of analyzing videos of moving vehicles captured by a fixed camera to draw a rectangular parallelepiped bounding box around the vehicle for each frame under low-light conditions. The primary objective is not to determine the actual space occupied by the car, but rather to accurately estimate and visualize the 3D bounding volume that encompasses the entire vehicle using geometric reconstruction techniques. The system must operate with minimal prior information, requiring only the intrinsic calibration parameters of the camera (K matrix) and a simplified model of the observed vehicle including basic dimensional parameters such as length, width, and the spatial configuration of rear lights.
+
+---
 
 ## 📋 Assumptions
-- The car has a **vertical symmetry plane**.
-- Two symmetric rear lights are visible.
-- The camera observes the car from the **back**.
-- The car is either **translating forward** or **steering with constant curvature**.
-- The road is **locally planar**.
 
-## 🛠 System Operation
-### 🔧 Offline Steps
-- **Camera Calibration**
-- **Retrieve Car Model**
-  - Width, length, rear light positions, and their height above ground
+* The car has a **vertical symmetry plane**.
+* Two **symmetric rear lights** are visible.
+* The camera observes the car from **behind**.
+* The vehicle is either **translating forward** or **steering at constant curvature**.
+* The road is **locally planar**.
 
-### ⚙️ Online Steps (Frame-Based Processing)
-1. Extract **two symmetric lights** from consecutive frames.
-2. Define the **light segment**, the horizontal segment joining the lights.
-3. Apply geometric transformations to determine the **3D position** of the segment.
-4. Use the **car model** and computed position to estimate the space occupied on the road.
+---
 
-## 📐 Geometric Processing
-### 🚗 Case 1: Car Moving Forward
-- The light segments in consecutive frames form a **rectangle**.
-- The **center of rotation** $C$ is determined.
-- **Parallel line constraints** help identify motion characteristics.
+## 🧠 Methods Implemented
 
-### 🔄 Case 2: Car Steering with Constant Curvature
-- The light segment **rotates** about a center of rotation $C$.
-- A **bisecting line** $b$ aids in motion analysis.
+### **method1**: Standard Localization via Homography
 
-## 📏 Methods Used
-### **1️⃣ Translating Forward**
-- Identify intersection points $V_x$ and $V_y$.
-- Compute the **3D direction** of the light segment.
-- Determine if the car is moving forward by checking perpendicularity.
-- Estimate **vanishing lines** and compute the **camera-to-plane distance**.
+→ Uses four coplanar points on the rear facade of the car (e.g., rear lights and license plate corners) to estimate pose from a single image using homography decomposition.
 
-### **2️⃣ Steering with Constant Curvature**
-- Find intersection points $C_b$ and $V_y$.
-- Validate if **directional constraints** hold.
-- Compute **vanishing lines** and estimate distances.
+### **method2**: Nighttime Localization from Image Pairs
 
-## ⚠️ Limitations & Recommendations
-### 🔴 Limitations
-- Requires **sufficient perspective** to ensure accurate calculations.
-- Parallel viewing rays may require additional **symmetry-based methods**.
+→ Designed for low-light settings, this method uses symmetric rear light points tracked across two frames. It exploits temporal motion cues to estimate the pose of the vehicle on the road.
 
-### ✅ Recommendations
-- Position the **camera at an inclined angle** to ensure **better perspective**.
-- Focus on the **straightforward translation** case first.
-- Utilize **ground truth data** from a reference plane for verification.
+### **method3**: Localization under Poor Perspective using Out-of-Plane Symmetric Features
 
-## 📍 Car Localization Approaches
-### 🔹 1. **Standard Localization**
-- Uses a **single image** and **homography estimation**:
-  $\mathbf{r}_1 \mathbf{r}_2 \mathbf{o}_{\pi} = K^{-1} H$
+→ When perspective cues are weak, this method uses symmetric features located on different planes of the car’s 3D structure (e.g., lights and mirrors) to recover pose by exploiting inter-frame symmetry and vanishing geometry.
 
-### 🔹 2. **Nighttime Localization (Image Pair-Based)**
-- Uses two **non-consecutive** frames to increase perspective.
-- Extracts symmetric features and applies **geometric processing**.
+### **method4**: PnP-based Vehicle Pose Estimation from Key Points
 
-### 🔹 3. **Nighttime Localization (Symmetric Elements-Based)**
-- Uses multiple symmetric elements to **estimate rotation**.
+→ This method estimates the vehicle’s 3D pose from a single image by solving the Perspective-n-Point (PnP) problem using a set of known 3D key points (e.g., rear lights, license plate corners, and side mirror) and their 2D projections. By including non-coplanar points such as the side mirror, the method improves robustness and accuracy, especially in low-perspective conditions.
 
-## 📏 Computing Horizontal Inclination Angle $\theta$
-- Extracts **y-coordinates** from key points.
-- Uses CAD model data to compute **rotation**.
-- Estimates **3D position** based on segment lengths.
+Each method folder contains:
 
-## 🎥 Experimentation & Ground Truth
-- A **daytime video** can serve as a reference **ground truth**.
-- Once **3D positions** of car elements are known, a **bounding box** defines the **occupied space**.
+* `main.py`: Run the method from the root with `python methodX/main.py`.
+* `results/`: Output bounding boxes and overlays.
+
+---
 
 ## 📂 Repository Structure
+
 ```
-📂 car-space-occupancy
- ├── 📜 README.md    # This file
- ├── 📜 assignment.pdf    # Assignment document
- ├── 📂 src          # Source code
- ├── 📂 data         # Video datasets
- ├── 📂 docs         # Documentation
+📁 IACV-SpaceOccupancy
+├── 📁 cameraCalibration        # Intrinsics + distortion estimation
+├── 📁 featureExtraction        # Frame sampling, light segmentation
+├── 📁 method1                  # Homography-based localization
+├── 📁 method2                  # Nighttime 3D triangulation (main method)
+├── 📁 method3                  # Constant curvature steering case
+├── 📁 method4                  # Symmetry and weak perspective cases
+├── 📜 assignment.pdf           # Official assignment given by the professor
+├── 📜 CAD_model.png            # Reference CAD sketch of car
+├── 📜 data.mp4                 # Original video file
+├── 📜 LICENSE                  # MIT license
+├── 📜 README.md                # You're reading it!
 ```
+
+---
 
 ## 🚀 Getting Started
+
 1. **Clone the Repository**
-   ```sh
-   git clone https://github.com/NiccoloSalvi/IACV-SpaceOccupancy.git
-   ```
-2. **Navigate to the Directory**
-   ```sh
-   cd IACV-SpaceOccupancy
-   ```
-3. **Run the Application**
-   ```sh
-   python main.py
-   ```
+
+```bash
+git clone https://github.com/NiccoloSalvi/IACV-SpaceOccupancy.git
+```
+
+2. **Navigate to the Project Root**
+
+```bash
+cd IACV-SpaceOccupancy
+```
+
+3. **Run One of the Methods**
+
+```bash
+python method2/main.py
+```
+
+> ℹ️ You can replace `method2` with `method1`, `method3`, or `method4` to try different strategies.
+
+---
 
 ## 📜 License
+
 This project is licensed under the **MIT License**.
+See `LICENSE` for details.
+
+---
+
+## 👥 Authors & Contributors
+
+This project was developed as part of the **Image Analysis and Computer Vision** course at Politecnico di Milano.
+It has been created in collaboration by:
+
+* [@alessiovilla](https://github.com/alessiovilla)
+* [@beazani](https://github.com/beazani)
+
+---

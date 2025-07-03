@@ -2,7 +2,7 @@ import cv2
 import os
 import numpy as np
 
-video_path = 'video.mp4'
+video_path = 'data.mp4'
 output_folder = 'extractedFrames'
 os.makedirs(output_folder, exist_ok=True)
 

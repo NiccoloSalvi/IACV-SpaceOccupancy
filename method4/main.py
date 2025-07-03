@@ -10,7 +10,7 @@ def ang(u,v):
     return np.arccos(np.clip(u.dot(v) / (np.linalg.norm(u) * np.linalg.norm(v)), -1.0, 1.0))
 
 # load the image
-img_path = os.path.join(os.getcwd(), "featureExtraction", "extractedFrames", "frame_08.png")
+img_path = os.path.join(os.getcwd(), "featureExtraction", "extractedFrames", "frame_11.png")
 img = cv2.imread(img_path)
 if img is None:
     raise FileNotFoundError("frame non trovato")
@@ -25,6 +25,10 @@ dist = np.array([[2.65104301e-01, -1.78436004e+00,  2.42978100e-03,  1.18030874e
 
 # undistort the image
 img_ud = cv2.undistort(img, K, dist)
+
+# extract points from the image
+L1, R1, L2, R2, TL, TR, BL, BR = process_frames("featureExtraction/extractedFrames/frame_02.png", "featureExtraction/extractedFrames/frame_11.png")
+mirror_point = mirror_frame("featureExtraction/extractedFrames/frame_11.png")
 
 # ---------- 1. pixel (undistorti) dei 4 punti sullo stesso piano ------
 pix = np.array([

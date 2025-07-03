@@ -210,7 +210,7 @@ print(f"phi = {np.degrees(phi_rad):.2f}°")
 distAB, distCD, distEF = 0.86, 0.52, 1.40
 
 # load and undistort image
-img = cv.imread(os.path.join(os.getcwd(), "featureExtraction/extractedFrames/frame_02.png"))
+img = cv.imread(os.path.join(os.getcwd(), "featureExtraction/extractedFrames/frame_11.png"))
 if img is None:
     raise FileNotFoundError("image not found")
 img_undist = cv.undistort(img, K, dist)

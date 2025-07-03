@@ -1,6 +1,10 @@
 import numpy as np
 import cv2
 import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'featureExtraction')))
+from extractLights2 import process_frames
+from getMirror import mirror_frame
 
 def to_homogeneous(p):
     return np.array([p[0], p[1], 1.0], dtype=float)
@@ -137,7 +141,7 @@ dims = {
 }
 
 # load the image
-img_path = os.path.join(os.getcwd(), "featureExtraction", "extractedFrames", "frame_08.png")
+img_path = os.path.join(os.getcwd(), "featureExtraction", "extractedFrames", "frame_11.png")
 img = cv2.imread(img_path)
 if img is None:
     raise FileNotFoundError("Image not found")
@@ -145,12 +149,14 @@ if img is None:
 # undistort the image
 img_ud = cv2.undistort(img, K, dist)
 
+_, _, L2, R2, TL, TR, _, _ = process_frames("featureExtraction/extractedFrames/frame_02.png", "featureExtraction/extractedFrames/frame_11.png")
+
 # define the point's pixel coordinates in the image
 pts_img = np.array([
-    [1192, 1648], # P0 = plate Top-Left (origin)
-    [1448, 1656], # P1 = plate Top-Right
-    [1036, 1592], # P2 = taillight Left
-    [1612, 1608] # P3 = taillight Right
+    TL, # P0 = plate Top-Left (origin)
+    TR, # P1 = plate Top-Right
+    L2, # P2 = taillight Left
+    R2 # P3 = taillight Right
 ], dtype=np.float64)
 
 # undistort the points

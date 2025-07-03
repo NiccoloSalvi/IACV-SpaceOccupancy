@@ -143,7 +143,7 @@ def detect_license_plate(image, lights, min_plate_area=200):
 
     # Define ROI in rotated image
     roi_margin = 20
-    roi_top = min(new_ly, new_ry) - 200
+    roi_top = min(new_ly, new_ry) - 10
     roi_bottom = max(new_ly, new_ry) + 60
     roi_left = new_lx - roi_margin
     roi_right = new_rx + roi_margin
@@ -152,12 +152,10 @@ def detect_license_plate(image, lights, min_plate_area=200):
     roi_left = max(0, roi_left)
     roi_right = min(w, roi_right)
     roi_top = max(0, roi_top)
-    print("ROI TOP:", roi_top)
     roi_bottom = min(h, roi_bottom)
 
     roi = rotated_image[roi_top:roi_bottom, roi_left:roi_right]
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-    cv2.imshow("ROI", roi)
 
     # white mask for white parts of the plate
     lower_white = np.array([0, 0, 200])

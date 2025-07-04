@@ -53,7 +53,7 @@ Each method folder contains:
 ├── 📁 method4                  # Symmetry and weak perspective cases
 ├── 📜 assignment.pdf           # Official assignment given by the professor
 ├── 📜 CAD_model.png            # Reference CAD sketch of car
-├── 📜 data.mp4                 # Original video file
+├── 📜 video.mp4                 # Original video file
 ├── 📜 LICENSE                  # MIT license
 ├── 📜 README.md                # You're reading it!
 ```

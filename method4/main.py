@@ -10,7 +10,8 @@ def ang(u,v):
     return np.arccos(np.clip(u.dot(v) / (np.linalg.norm(u) * np.linalg.norm(v)), -1.0, 1.0))
 
 # load the image
-img_path = os.path.join(os.getcwd(), "featureExtraction", "extractedFrames", "frame_11.png")
+frame = "frame_15.png"
+img_path = os.path.join(os.getcwd(), "featureExtraction", "extractedFrames", frame)
 img = cv2.imread(img_path)
 if img is None:
     raise FileNotFoundError("frame non trovato")
@@ -27,8 +28,8 @@ dist = np.array([[2.65104301e-01, -1.78436004e+00,  2.42978100e-03,  1.18030874e
 img_ud = cv2.undistort(img, K, dist)
 
 # extract points from the image
-L1, R1, L2, R2, TL, TR, BL, BR = process_frames("featureExtraction/extractedFrames/frame_02.png", "featureExtraction/extractedFrames/frame_11.png")
-mirror_point = mirror_frame("featureExtraction/extractedFrames/frame_11.png")
+L1, R1, L2, R2, TL, TR, BL, BR = process_frames("featureExtraction/extractedFrames/frame_02.png", "featureExtraction/extractedFrames/" + frame)
+mirror_point = mirror_frame("featureExtraction/extractedFrames/" + frame)
 
 # ---------- 1. pixel (undistorti) dei 4 punti sullo stesso piano ------
 pix = np.array([
@@ -108,7 +109,7 @@ obj_full = np.array([
     [PLATE_W, -PLATE_H, 0], # bottom-right corner of the plate
     [-0.540, -0.100, Z_FARO], # left rear light (relative to TL)
     [PLATE_W + 0.540, -0.100, Z_FARO], # right rear light (relative to TL)
-    # [-0.7+1.958, 0.150, -2.050 + 0.3] # optional: right side mirror (relative to TL)
+    [-0.7+1.958, 0.150, -2.050 + 0.3] # optional: right side mirror (relative to TL)
 ], dtype=np.float32)
 
 pix_full = np.array([
@@ -118,7 +119,7 @@ pix_full = np.array([
     [BR[0], BR[1]],  # P3 = plate BR
     [L2[0], L2[1]],  # P4 = rear-light L
     [R2[0], R2[1]],  # P5 = rear-light R
-    # [mirror_point[0], mirror_point[1]] # P6 = side mirror R - uncomment it if you want to use just taillights and license plate
+    [mirror_point[0], mirror_point[1]] # P6 = side mirror R - uncomment it if you want to use just taillights and license plate
 ], dtype=np.float32)
 
 # undistort pixel coordinates using the camera calibration parameters
@@ -181,6 +182,6 @@ for i in range(4):
 
 cv2.imshow("box", cv2.resize(img_ud, None, fx=0.35, fy=0.35))
 # bbox_4pts_iterative, bbox_4pts_epnp, bbox_5pts_iterative, bbox_5pts_epnp
-cv2.imwrite(os.path.join(os.getcwd(), "method4", "results", "bbox_4pts_iterative.jpg"), img_ud)
+cv2.imwrite(os.path.join(os.getcwd(), "method4", "results", "frame_15.jpg"), img_ud)
 cv2.waitKey(0)
 cv2.destroyAllWindows()

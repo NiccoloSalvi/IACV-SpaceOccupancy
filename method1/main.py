@@ -4,7 +4,6 @@ import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'featureExtraction')))
 from extractLights2 import process_frames
-from getMirror import mirror_frame
 
 def to_homogeneous(p):
     return np.array([p[0], p[1], 1.0], dtype=float)
@@ -41,8 +40,8 @@ def triangulate_plate_points(K, p0_img, p1_img, plate_width):
 
 def compute_vanishing_direction(K, p0_img, p1_img, p2_img, p3_img):
     # convert image points to homogeneous coordinates
-    l1 = to_line(to_homogeneous(p0_img), to_homogeneous(p1_img)) # line through p0 and p1
-    l2 = to_line(to_homogeneous(p2_img), to_homogeneous(p3_img)) # line through p2 and p3
+    l1 = to_line(to_homogeneous(p0_img), to_homogeneous(p1_img)) # line through TL and TR
+    l2 = to_line(to_homogeneous(p2_img), to_homogeneous(p3_img)) # line through L2 and R2
 
     # compute vanishing point as intersection of the two lines
     vp = normalize(np.cross(l1, l2))

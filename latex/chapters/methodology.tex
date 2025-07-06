@@ -1,0 +1,29 @@
+\section{Methodology Overview}
+This chapter introduces the overall approach followed to estimate the space occupied by a moving vehicle using visual data acquired in low-light conditions. Based on the input video, the intrinsic calibration matrix and the extracted features obtained in the previous chapters, we developed and implemented four distinct localization methods.
+
+Each method relies on geometric reasoning and leverages known or assumed properties of the scene, such as symmetry, planarity, or the car's motion profile. While each method aims at reconstructing the 3D position and orientation of the vehicle, they differ in the number and type of visual features used, and in their robustness to perspective limitations.
+
+The methods presented in the following chapters are:
+\begin{enumerate}
+    \item \textbf{Standard localization via homography}: uses four coplanar points on the rear facade of the car (e.g., rear lights and license plate corners) to estimate pose from a single image using homography decomposition.
+    
+    \item \textbf{Nighttime localization from pair of images}: designed for low-light settings, this method uses symmetric rear light points tracked across two frames. It exploits temporal motion cues to estimate the pose of the vehicle on the road.
+    
+    \item \textbf{Localization under poor perspective using out-of-plane symmetric features}: when perspective cues are weak, this method uses symmetric features located on different planes of the car's 3D structure (e.g., lights and mirrors) to recover pose by exploiting inter-frame symmetry and vanishing geometry.
+
+    \item \textbf{PnP-based vehicle pose estimation from key points}: this method estimates the vehicle’s 3D pose from a single image by solving the Perspective-n-Point (PnP) problem using a set of known 3D key points (e.g., rear lights, license plate corners, and side mirror) and their 2D projections. By including non-coplanar points such as the side mirror, the method improves robustness and accuracy, especially in low-perspective conditions.
+\end{enumerate}
+
+Each method is presented with its theoretical foundations, practical implementation, and a critical discussion of its applicability. Comparative results will be provided at the end to assess their relative performance and reliability in real-world conditions.
+
+\section{Method 1: Standard localization via homography}
+\input{chapters/method1}
+
+\section{Method 2: Nighttime localization from pair of images}
+\input{chapters/method2}
+
+\section{Method 3: Poor perspective localization using out-of-plane features}
+\input{chapters/method3}
+
+\section{Method 4: PnP-based vehicle pose estimation from key points}
+\input{chapters/method4}

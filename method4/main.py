@@ -106,9 +106,9 @@ obj_full = np.array([
     [PLATE_W, 0, 0], # top-right corner of the plate
     [0, -PLATE_H, 0], # bottom-left corner of the plate
     [PLATE_W, -PLATE_H, 0], # bottom-right corner of the plate
-    [-0.340, 0.100, Z_FARO], # left rear light (relative to TL)
-    [PLATE_W + 0.340, 0.100, Z_FARO], # right rear light (relative to TL)
-    [-0.7+1.958, 0.150, -2.050 + 0.3] # optional: right side mirror (relative to TL)
+    [-0.540, -0.100, Z_FARO], # left rear light (relative to TL)
+    [PLATE_W + 0.540, -0.100, Z_FARO], # right rear light (relative to TL)
+    # [-0.7+1.958, 0.150, -2.050 + 0.3] # optional: right side mirror (relative to TL)
 ], dtype=np.float32)
 
 pix_full = np.array([
@@ -118,20 +118,13 @@ pix_full = np.array([
     [BR[0], BR[1]],  # P3 = plate BR
     [L2[0], L2[1]],  # P4 = rear-light L
     [R2[0], R2[1]],  # P5 = rear-light R
-    [mirror_point[0], mirror_point[1]] # P6 = side mirror R - uncomment it if you want to use just taillights and license plate
+    # [mirror_point[0], mirror_point[1]] # P6 = side mirror R - uncomment it if you want to use just taillights and license plate
 ], dtype=np.float32)
 
 # undistort pixel coordinates using the camera calibration parameters
 uv_full = cv2.undistortPoints(pix_full.reshape(-1, 1, 2), K, dist, P=K).reshape(-1, 2)
 
 # estimate camera pose using the 3d model points and their corresponding 2d image projections
-# use pnp with epnp algorithm ignoring initial guess
-# success, rvec, tvec = cv2.solvePnP(
-#     obj_full, uv_full, K, None,
-#     rvec=rvec0, tvec=tvec0,
-#     useExtrinsicGuess=False,
-#     flags=cv2.SOLVEPNP_EPNP
-# )
 
 # use pnp with iterative algorithm using initial guess
 success, rvec, tvec = cv2.solvePnP(
@@ -140,6 +133,14 @@ success, rvec, tvec = cv2.solvePnP(
     useExtrinsicGuess=True, 
     flags=cv2.SOLVEPNP_ITERATIVE
 )
+
+# use pnp with epnp algorithm ignoring initial guess
+# success, rvec, tvec = cv2.solvePnP(
+#     obj_full, uv_full, K, None,
+#     rvec=rvec0, tvec=tvec0,
+#     useExtrinsicGuess=False,
+#     flags=cv2.SOLVEPNP_EPNP
+# )
 
 # refine the initial pose estimate using the levenberg-marquardt optimization
 rvec, tvec = cv2.solvePnPRefineLM(obj_full, uv_full, K, None, rvec, tvec)
@@ -179,6 +180,7 @@ for i in range(4):
     cv2.line(img_ud, tuple(box2d[i]), tuple(box2d[i+4]), (0, 0, 255), 5)
 
 cv2.imshow("box", cv2.resize(img_ud, None, fx=0.35, fy=0.35))
-cv2.imwrite(os.path.join(os.getcwd(), "method4", "results", "bbox_5pts_iterative.jpg"), img_ud)
+# bbox_4pts_iterative, bbox_4pts_epnp, bbox_5pts_iterative, bbox_5pts_epnp
+cv2.imwrite(os.path.join(os.getcwd(), "method4", "results", "bbox_4pts_iterative.jpg"), img_ud)
 cv2.waitKey(0)
 cv2.destroyAllWindows()

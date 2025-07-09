@@ -46,14 +46,16 @@ Each method folder contains:
 ```
 📁 IACV-SpaceOccupancy
 ├── 📁 cameraCalibration        # Intrinsics + distortion estimation
+├── 📁 docs                     # report + slides of the project
 ├── 📁 featureExtraction        # Frame sampling, light segmentation
+├── 📁 latex                    # report's latex code 
 ├── 📁 method1                  # Homography-based localization
 ├── 📁 method2                  # Nighttime 3D triangulation (main method)
 ├── 📁 method3                  # Constant curvature steering case
 ├── 📁 method4                  # Symmetry and weak perspective cases
 ├── 📜 assignment.pdf           # Official assignment given by the professor
 ├── 📜 CAD_model.png            # Reference CAD sketch of car
-├── 📜 video.mp4                 # Original video file
+├── 📜 video.mp4                # Original video file
 ├── 📜 LICENSE                  # MIT license
 ├── 📜 README.md                # You're reading it!
 ```
